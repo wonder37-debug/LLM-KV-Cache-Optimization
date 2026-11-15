@@ -724,3 +724,63 @@ def test_observed_integration_rejects_arm_for_other_policy() -> None:
             event_index=event_index,
             sink=event_index,
         )
+
+
+def test_two_decisions_in_one_context_settle_the_first(tmp_path: Path) -> None:
+    """A second allocation attempt must not collide with a pending reconciliation."""
+    from scripts.spikes.phase2_minimal_observability_metal import (
+        _CountingForcedReleaseObserver,
+        _IndexedEventSink,
+        _ObservedRetentionIntegration,
+    )
+
+    profile = _synthetic_profile_for_tests(tmp_path)
+    profile_sha = load_calibration_profile(profile).sha256
+    config = parse_policy_config(
+        _policy_options(profile, profile_sha),
+        repo_root=REPO_ROOT,
+        clock_domain="system_monotonic",
+    )
+    blocks = _blocks(8)
+    registry = _registry_with_chains({"A": blocks[:4], "B": blocks[4:]})
+    arm, _, reconciler = build_asym_apc_arm(registry=registry, config=config)
+    arm.coordinator.observe_chain_access("A", 50.0)
+    arm.coordinator.observe_chain_access("B", 60.0)
+
+    sink = RecordingSink()
+    event_index = _IndexedEventSink(sink)
+    forced = _CountingForcedReleaseObserver(event_index, event_index)
+    integration = _ObservedRetentionIntegration(
+        SimpleNamespace(retention=RetentionManager(FakeClock(100.0))),
+        FakeClock(100.0),
+        forced,
+        phase2g_block_policy="ASYM_APC",
+        phase2g_a2_registry=registry,
+        asym_apc_arm=arm,
+        asym_apc_reconciler=reconciler,
+        asym_apc_pool_provider=lambda: None,
+        event_index=event_index,
+        sink=event_index,
+        clock_domain="system_monotonic",
+    )
+    integration.begin_pressure_context(
+        boundary_id="boundary", stage_id="stage", pressure_request_id="pressure-1"
+    )
+    for _ in range(2):
+        integration.apply_pressure(
+            mode=RetentionMode.CONTROLLED,
+            blocks=blocks,
+            required_blocks=1,
+            timestamp=100.0,
+            remove_selected=lambda ids: None,
+        )
+        integration.observe_native_selection_returned(((4, None),))
+    integration.end_pressure_context()
+
+    types = sink.event_types()
+    assert types.count("ASYM_APC_BLOCK_DECISION") == 2
+    assert "ASYM_APC_PHYSICAL_OUTCOME" in types
+    statuses = {
+        event.payload["status"] for event in sink.events if event.event_type == "ASYM_APC_PHYSICAL_OUTCOME"
+    }
+    assert "NO_PHYSICAL_EVICTION_OBSERVED" in statuses

@@ -1373,6 +1373,13 @@ class _ObservedRetentionIntegration:
         self._forced_release_observer.begin_decision(context)
         self._active_decision_id = decision_id
         if self._asym_apc_reconciler is not None:
+            if self._asym_apc_reconciler.has_pending:
+                # A previous allocation in the same execution context did not
+                # observe its evictions yet; settle it with the current state.
+                self._settle_asym_apc_reconciliation(
+                    pool_state=self._capture_native_pool_state(),
+                    phase="context_close",
+                )
             self._asym_apc_reconciler.open_context(
                 pool_state=self._capture_native_pool_state(),
                 timestamp=float(self._clock.now()),
