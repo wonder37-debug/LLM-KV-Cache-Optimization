@@ -1,0 +1,83 @@
+name: AsymAPC consolidated main validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/kvopt/costaware/**'
+      - 'src/kvopt/runtime/vllm/**'
+      - 'scripts/spikes/phase2_minimal_observability_metal.py'
+      - 'tests/**'
+      - 'scripts/probes/asym_apc_native/**'
+      - 'docs/experiments/asym-apc-*.md'
+      - '.github/workflows/asym-apc-consolidated.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    name: Focused policy, Continuum, evidence, multi-seed CPU
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install project and pytest
+        run: python -m pip install -e '.[dev]'
+      - name: Compile production and Native runner code
+        run: python -m compileall -q src/kvopt scripts/spikes/phase2_minimal_observability_metal.py
+      - name: New algorithm and real repository integration tests
+        run: python -m pytest -q tests/test_asym_apc_native.py tests/test_asym_apc_repo_integration.py
+      - name: Existing A2, Continuum, Native observation regression
+        run: |
+          python -m pytest -q \
+            tests/test_costaware_a2_native.py \
+            tests/test_costaware_a2_evidence.py \
+            tests/test_costaware_a2_contract.py \
+            tests/test_continuum_retention_integration.py \
+            tests/test_continuum_pressure.py \
+            tests/test_continuum_vllm_observation_runner.py
+      - name: Paired synthetic CPU sensitivity - independent seeds
+        run: |
+          mkdir -p cpu-replay
+          for seed in 20261115 20261116 7 42 2027; do
+            python scripts/probes/asym_apc_native/simulate.py --groups 320 --seed "$seed" --out "cpu-replay/${seed}.json" > /dev/null
+          done
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          for path in sorted(Path('cpu-replay').glob('*.json')):
+              result = json.loads(path.read_text())
+              assert result['status'] == 'SYNTHETIC_CPU_ONLY'
+              assert result['decision_count'] == 320
+              assert sum(result['group_win_tie_loss']) == 320
+              assert 0 <= result['victim_set_divergence_count'] <= 320
+              for name in ('a0_realized_recompute_tokens', 'ours_realized_recompute_tokens'):
+                  assert result[name] >= 0
+              print(path.name, 'divergence=', result['victim_set_divergence_count'],
+                    'wins/ties/losses=', result['group_win_tie_loss'],
+                    'sim_tokens=', result['a0_realized_recompute_tokens'],
+                    result['ours_realized_recompute_tokens'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: asym-apc-multiseed-synthetic-results
+          path: cpu-replay/*.json
+          if-no-files-found: ignore
+
+  full-repository:
+    name: Full repository Python test suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[dev]'
+      - name: Whole project regression suite
+        run: python -m pytest -q tests --disable-warnings --maxfail=1
