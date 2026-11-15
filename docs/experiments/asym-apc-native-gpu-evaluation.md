@@ -57,7 +57,7 @@ free queue may favour the selector.
 | A/B/C campaign design (Native LRU / A0 / ASYM_APC) | `configs/asym_apc/asym-apc-native-evaluation-v1.json`, `src/kvopt/workload/asym_apc_materialize.py` | `IMPLEMENTED_UNEXECUTED` / materialization `CPU_TESTED` |
 | Campaign execution | `src/kvopt/workload/asym_apc_runner.py` | `IMPLEMENTED_UNEXECUTED` / failure accounting `CPU_TESTED` |
 | Paired analysis and Markdown report | `src/kvopt/profiling/asym_apc_report.py` | `IMPLEMENTED_UNEXECUTED` / arithmetic `CPU_TESTED` |
-| Tests | `tests/test_asym_apc_native_arm.py` (21), `tests/test_asym_apc_campaign.py` (7) | `CPU_TESTED` |
+| Tests | `tests/test_asym_apc_native_arm.py` (22), `tests/test_asym_apc_campaign.py` (7) | `CPU_TESTED` |
 
 ### 1.4 Design decisions worth recording
 
@@ -242,10 +242,10 @@ is "sign consistency plus spread", not a significance claim; §8 states this lim
 
 | Suite | Result |
 | --- | --- |
-| `tests/test_asym_apc_native_arm.py` (new) | **21 passed** |
+| `tests/test_asym_apc_native_arm.py` (new) | **22 passed** |
 | `tests/test_asym_apc_campaign.py` (new) | **7 passed** |
-| Existing AsymAPC + A2 + Continuum retention hook subset | **96 passed** |
-| Whole repository | **2006 passed, 19 skipped, 3 failed** |
+| Combined AsymAPC + A2 + Continuum retention subset (includes the new tests) | **97 passed** |
+| Whole repository | **2007 passed, 19 skipped, 3 failed** |
 
 The three whole-repository failures are pre-existing environment gaps, not regressions:
 
@@ -257,8 +257,8 @@ The three whole-repository failures are pre-existing environment gaps, not regre
   the repository `PYTHONPATH`; the package is not pip-installed in this container.
 
 Baseline on `main` before this branch was 1975 passed / 19 skipped / 6 failed in the same
-container; the three additional passes are tests that require a clean git worktree, which this
-branch satisfies once committed.
+container; the extra passes are the 29 new tests plus three tests that require a clean git
+worktree, which this branch satisfies once committed.
 
 ### 4.2 What the new tests actually prove (`CPU_TESTED`)
 
