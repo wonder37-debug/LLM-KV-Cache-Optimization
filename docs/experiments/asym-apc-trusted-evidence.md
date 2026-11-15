@@ -19,6 +19,12 @@ No vLLM API can prove an unobserved future reuse, nor reconstruct a full logical
 
 ## Tests
 
+**Full-checkout GitHub Actions result:** [Run #43700964837](https://github.com/wonder37-debug/LLM-KV-Cache-Optimization/actions/runs/43700964837) — **PASS** on Python 3.11:
+- 28 new selector / real A2 registry + Continuum integration tests passed;
+- 177 existing A2 native/evidence/contract, Continuum pressure/integration, and vLLM observation-runner regression tests passed;
+- 205 tests passed total, compileall passed, fixed-seed synthetic CPU replay passed.
+- No GPU, no original Phase 3 archive re-execution, no measured latency-profile input. This is not a claim that the historical 74 fallbacks were retrospectively repaired.
+
 Run on fork checkout:
 
 ```bash
