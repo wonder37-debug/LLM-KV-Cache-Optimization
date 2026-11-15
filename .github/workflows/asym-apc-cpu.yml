@@ -1,0 +1,23 @@
+name: AsymAPC experimental CPU smoke
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/kvopt/costaware/asym_apc_native.py'
+      - 'tests/test_asym_apc_native.py'
+      - 'tests/test_asym_apc_repo_integration.py'
+      - 'scripts/probes/asym_apc_native/**'
+      - '.github/workflows/asym-apc-cpu.yml'
+  workflow_dispatch:
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e . pytest
+      - run: python -m pytest -q tests/test_asym_apc_native.py tests/test_asym_apc_repo_integration.py
+      - run: python scripts/probes/asym_apc_native/simulate.py --groups 160 --seed 20261115
