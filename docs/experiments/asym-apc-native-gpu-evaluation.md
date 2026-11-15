@@ -1,5 +1,12 @@
 # AsymAPC-inspired contiguous-prefix Block eviction: Native integration and evaluation report
 
+> **Update (executed follow-up):** the cache substrate of this integration was since
+> executed for real on the CPU device — real vLLM `BlockPool`, real hashes and real
+> eviction — and the selector was measured against the native allocator. See
+> [`asym-apc-real-blockpool-evaluation.md`](asym-apc-real-blockpool-evaluation.md).
+> The CUDA path described here remains unexecuted; no GPU number exists.
+
+
 **Scope:** personal fork `wonder37-debug/LLM-KV-Cache-Optimization`, branch
 `experiment/asym-apc-native-gpu-arm`.
 **Status of this document:** implementation complete; Native GPU execution **not performed**

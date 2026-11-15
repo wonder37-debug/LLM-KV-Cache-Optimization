@@ -223,7 +223,7 @@ def test_profile_must_be_a_native_measurement(tmp_path: Path) -> None:
     document = json.loads(profile.read_text(encoding="utf-8"))
     document["measurement_source"] = "simulator"
     profile.write_text(json.dumps(document), encoding="utf-8")
-    with pytest.raises(CalibrationProfileError, match="Native GPU measurement"):
+    with pytest.raises(CalibrationProfileError, match="not accepted here"):
         load_calibration_profile(profile)
 
 

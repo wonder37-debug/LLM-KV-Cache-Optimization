@@ -95,15 +95,19 @@ class CalibrationProfileError(ValueError):
 # ---------------------------------------------------------------------------
 
 
+DEFAULT_ALLOWED_MEASUREMENT_SOURCES: tuple[str, ...] = ("native_gpu",)
+
+
 @dataclass(frozen=True, slots=True)
 class AsymAPCProfile:
-    """Hash-bound, GPU-measured prefill cost curves."""
+    """Hash-bound prefill cost curves plus the device they were measured on."""
 
     path: Path
     sha256: str
     curves_by_length: Mapping[int, APCLatencyCurve]
     provenance: Mapping[str, Any]
     block_size: int
+    measurement_source: str = "native_gpu"
 
     @property
     def covered_lengths(self) -> tuple[int, ...]:
@@ -129,9 +133,19 @@ def _require_finite(value: object, field_name: str) -> float:
 
 
 def load_calibration_profile(
-    path: Path, *, expected_sha256: str | None = None
+    path: Path,
+    *,
+    expected_sha256: str | None = None,
+    allowed_sources: Sequence[str] = DEFAULT_ALLOWED_MEASUREMENT_SOURCES,
 ) -> AsymAPCProfile:
-    """Load and validate a GPU calibration profile written by the calibrator."""
+    """Load and validate a calibration profile written by a calibrator.
+
+    ``allowed_sources`` defaults to GPU measurements only, so a profile produced
+    on another device can never be picked up silently. A caller that intends to
+    run the selector on a different device must pass that source explicitly, and
+    the source is then carried into every audit record instead of being relabelled
+    as a GPU measurement.
+    """
     if not isinstance(path, Path):
         raise TypeError("path must be a Path")
     if not path.is_file():
@@ -147,9 +161,12 @@ def load_calibration_profile(
         raise CalibrationProfileError("calibration profile must contain an object")
     if document.get("schema_version") != PROFILE_SCHEMA:
         raise CalibrationProfileError("unsupported calibration profile schema")
-    if document.get("measurement_source") != "native_gpu":
+    measurement_source = document.get("measurement_source")
+    if measurement_source not in allowed_sources:
         raise CalibrationProfileError(
-            "calibration profile must come from a Native GPU measurement, not a simulator"
+            "calibration profile measurement source "
+            f"{measurement_source!r} is not accepted here; allowed sources are "
+            f"{list(allowed_sources)}"
         )
     curves: dict[int, APCLatencyCurve] = {}
     for entry in document.get("curves", []):
@@ -194,6 +211,7 @@ def load_calibration_profile(
         curves_by_length=curves,
         provenance=dict(provenance),
         block_size=block_size,
+        measurement_source=str(measurement_source),
     )
 
 
@@ -722,10 +740,13 @@ def build_asym_apc_arm(
     pool_probe: Callable[[], Any] | None = None,
     context_provider: Callable[[], Mapping[str, object]] | None = None,
     clock: Callable[[], float] = time.perf_counter,
+    allowed_sources: Sequence[str] = DEFAULT_ALLOWED_MEASUREMENT_SOURCES,
 ) -> tuple[InstrumentedAsymAPCCoordinator, AsymAPCProfile, PhysicalEvictionReconciler]:
     """Build the gated arm, refusing to start without a measured profile."""
     profile = load_calibration_profile(
-        config.profile_path, expected_sha256=config.profile_sha256
+        config.profile_path,
+        expected_sha256=config.profile_sha256,
+        allowed_sources=allowed_sources,
     )
     coordinator = AsymAPCNativeCoordinator(
         registry,
