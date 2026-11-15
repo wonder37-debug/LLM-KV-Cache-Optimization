@@ -103,6 +103,7 @@ class AsymAPCAudit:
     selected_proxy_ms: float | None = None
     ranked_candidate_count: int = 0
     exact_search: bool = False
+    missing_reasons: tuple[tuple[str, int], ...] = ()
 
     @property
     def victim_set_differs(self) -> bool:
@@ -131,6 +132,7 @@ class AsymAPCNativeCoordinator:
         max_exact_subsets: int = 3000,
         max_greedy_operations: int = 50000,
         min_proxy_gain_ms: float = 1e-9,
+        clock_domain: str = "system_monotonic",
     ) -> None:
         if not callable(getattr(registry, "build_request", None)):
             raise TypeError("registry needs A2NativeSnapshotRegistry.build_request")
@@ -148,6 +150,9 @@ class AsymAPCNativeCoordinator:
         self._max_exact = max_exact_subsets
         self._max_ops = max_greedy_operations
         self._min_gain = _finite_nonnegative(min_proxy_gain_ms, "min_proxy_gain_ms")
+        if not isinstance(clock_domain, str) or not clock_domain:
+            raise ValueError("clock_domain must be nonempty")
+        self._clock_domain = clock_domain
         self._last_access: dict[str, float] = {}
         self.last_audit: AsymAPCAudit | None = None
 
@@ -161,6 +166,28 @@ class AsymAPCNativeCoordinator:
             raise ValueError("cannot backdate observed chain access")
         self._last_access[chain_id] = timestamp
 
+    def _observed_access_time(self, chain_id: str) -> float | None:
+        """Use observed Native prefix snapshots, never TTL or post-decision truth.
+
+        The registry may expose a separately recorded monotonic timestamp.
+        Reject other clocks and snapshots whose content generation has changed.
+        """
+        explicit = self._last_access.get(chain_id)
+        getter = getattr(self._registry, "last_access_observation", None)
+        if callable(getter):
+            fact = getter(chain_id)
+            if fact is not None and getattr(fact, "clock_domain", None) == self._clock_domain:
+                chain_snapshot = getattr(self._registry, "snapshot", lambda _c: None)(chain_id)
+                if (chain_snapshot is not None
+                    and getattr(fact, "native_hash_process_id", None)
+                        == getattr(chain_snapshot, "native_hash_process_id", None)
+                    and getattr(fact, "content_hashes", None)
+                        == getattr(chain_snapshot, "content_hashes", None)):
+                    when = getattr(fact, "timestamp", None)
+                    if isinstance(when, (float, int)) and math.isfinite(when) and when >= 0:
+                        return max(float(when), explicit) if explicit is not None else float(when)
+        return explicit
+
     def select_victims(
         self,
         candidates: Sequence[Any],
@@ -170,24 +197,30 @@ class AsymAPCNativeCoordinator:
         required_blocks: int,
         timestamp: float,
     ) -> tuple[int, ...]:
-        """Compute the minimum estimated *lost contiguous-prefix prefill*.
+        """Select from proved candidates, preserving unknown candidates' A0 status.
 
-        This makes no mutations to native blocks, their hashes or their queue.
-        The caller performs the existing native commit/removal after validation.
+        A missing hash/chain/profile outside the A0 victim set must not veto an
+        otherwise complete decision. Unknown candidates are NEVER promoted to
+        victims, and an unverified A0 victim is never displaced or assigned a
+        fictitious zero cost. Only a verified subset may be re-ordered, within
+        the real Continuum eligibility tiers. Audit reports partial coverage.
         """
         timestamp = _finite_nonnegative(timestamp, "timestamp")
-        if isinstance(required_blocks, bool) or required_blocks < 0:
-            raise ValueError("required_blocks must be nonnegative")
+        if isinstance(required_blocks, bool) or not isinstance(required_blocks, int) or required_blocks < 0:
+            raise ValueError("required_blocks must be a non-negative integer")
         eligible_order = tuple(b.block_id for b in preparation.virtual_eligible_order)
         need = min(required_blocks, len(eligible_order))
         baseline = eligible_order[:need]
 
         def finish(reason: str, selected: tuple[int, ...] | None = None,
                    base_loss: float | None = None, proposed_loss: float | None = None,
-                   ranked: int = 0, exact: bool = False) -> tuple[int, ...]:
+                   ranked: int = 0, exact: bool = False,
+                   missing: Mapping[str, int] | None = None) -> tuple[int, ...]:
             result = baseline if selected is None else selected
-            self.last_audit = AsymAPCAudit(timestamp, baseline, result, reason,
-                                           base_loss, proposed_loss, ranked, exact)
+            self.last_audit = AsymAPCAudit(
+                timestamp, baseline, result, reason, base_loss, proposed_loss,
+                ranked, exact, tuple(sorted((missing or {}).items())),
+            )
             return result
 
         if not need:
@@ -201,19 +234,18 @@ class AsymAPCNativeCoordinator:
             return finish("nonzero_refcount")
         if need == len(eligible_order):
             return finish("no_choice")
-        # Validate the tier labels from the *actual* frozen Continuum plan.
         tier_by_id: dict[int, int] = {}
         for item in preparation.original_free_queue:
-            if item.eligibility_tier is None:
-                continue
-            tier_by_id[item.block_id.block_id] = int(item.eligibility_tier)
+            if item.eligibility_tier is not None:
+                tier_by_id[item.block_id.block_id] = int(item.eligibility_tier)
         if set(eligible_order) != set(tier_by_id):
             return finish("tier_contract_mismatch")
         if any(tier_by_id[a] > tier_by_id[b]
                for a, b in zip(eligible_order, eligible_order[1:])):
             return finish("tier_order_mismatch")
 
-        # Registry proves content identity and actual depth, reusing A2's source.
+        # A2's registry performs read-only content-hash, chain-depth and residency
+        # reconciliation. Physical IDs or Native LRU ranks are never depths.
         try:
             from kvopt.runtime.vllm.types import EvictionContext
             context = EvictionContext(need, len(candidates), len(candidates), timestamp)
@@ -225,109 +257,154 @@ class AsymAPCNativeCoordinator:
             if (len(blocks) != len(req.blocks) or set(blocks) != set(eligible_order)
                 or req.required_blocks != need or req.timestamp != timestamp):
                 return finish("request_contract_mismatch")
-            for bid in eligible_order:
-                b, original = blocks[bid], by_id[bid]
-                if (b.native_rank != original.lru_rank
-                    or b.has_block_hash != original.has_block_hash):
-                    return finish("content_contract_mismatch")
-                if not b.has_block_hash:
-                    if b.memberships:
-                        return finish("hashless_has_memberships")
-                    continue
-                if not b.memberships or not original.content_hash:
-                    return finish("content_unverified")
-                hashes = {m.content_hash for m in b.memberships}
-                if hashes != {original.content_hash}:
-                    return finish("content_identity_mismatch")
-                for m in b.memberships:
-                    length = req.chain_length.get(m.chain)
-                    if (not isinstance(length, int) or isinstance(length, bool)
-                        or length < 1 or m.depth < 1 or m.depth > length):
-                        return finish("depth_unverified")
-                    if m.chain not in self._last_access:
-                        return finish("recency_missing")
-                    if self._last_access[m.chain] > timestamp:
-                        return finish("future_observation")
-            # Refuse ambiguous duplicate depths; a physical slot may belong to
-            # multiple chains but two *different* blocks may not claim a depth.
-            positions: dict[tuple[str, int], int] = {}
-            for b in blocks.values():
-                for m in b.memberships:
-                    pos = (m.chain, m.depth)
-                    if pos in positions and positions[pos] != b.block_id:
-                        return finish("depth_collision")
-                    positions[pos] = b.block_id
         except (KeyError, ValueError, TypeError, AttributeError, RuntimeError) as exc:
             return finish(f"invalid_native_evidence:{type(exc).__name__}")
 
-        # Use *all* current chains, including shared physical blocks.
-        memberships = {bid: tuple((m.chain, m.depth) for m in blocks[bid].memberships)
-                       for bid in eligible_order}
-        involved_chains = {chain for entries in memberships.values()
-                           for chain, _ in entries}
-        lengths = {c: req.chain_length[c] for c in involved_chains}
-        curve_by_chain = {}
-        for chain, reusable_depth in lengths.items():
-            # In A2, chain_length is the CURRENT contiguous reusable prefix,
-            # not necessarily the original target prompt length. A broken
-            # prefix still has a longer original chain; estimate incremental
-            # prefill using the original full-length calibrated curve.
-            snapshot_getter = getattr(self._registry, "snapshot", None)
-            snapshot = snapshot_getter(chain) if callable(snapshot_getter) else None
-            original_blocks = (len(snapshot.block_ids) if snapshot is not None
-                               else reusable_depth)
-            if original_blocks < reusable_depth:
-                return finish("chain_length_mismatch")
-            curve = self._curves.get(original_blocks)
-            if curve is None:
-                return finish("profile_missing")
-            curve_by_chain[chain] = curve
-        weights = {c: self._decay.weight(timestamp - self._last_access[c])
-                   for c in curve_by_chain}
-        base_cost = {c: curve_by_chain[c].at(lengths[c]) for c in curve_by_chain}
+        from collections import Counter
+        missing: Counter[str] = Counter()
+        invalid: dict[int, str] = {}
+        memberships: dict[int, tuple[tuple[str, int], ...]] = {}
+        lengths: dict[str, int] = {}
+        curves: dict[str, APCLatencyCurve] = {}
+        access: dict[str, float] = {}
+        seen_depths: dict[tuple[str, int], int] = {}
+
+        # Each candidate is validated independently, including all its shared
+        # memberships. A failure elsewhere in the free queue does not taint it.
+        for bid in eligible_order:
+            b, original = blocks[bid], by_id[bid]
+            reason: str | None = None
+            candidate_members: list[tuple[str, int]] = []
+            if b.native_rank != original.lru_rank or b.has_block_hash != original.has_block_hash:
+                reason = "content_contract_mismatch"
+            elif not b.has_block_hash:
+                if b.memberships:
+                    reason = "hashless_has_memberships"
+            elif not b.memberships or not original.content_hash:
+                reason = "content_unverified"
+            elif {m.content_hash for m in b.memberships} != {original.content_hash}:
+                reason = "content_identity_mismatch"
+            else:
+                for m in b.memberships:
+                    length = req.chain_length.get(m.chain)
+                    if (not isinstance(length, int) or isinstance(length, bool)
+                        or length < 1 or not isinstance(m.depth, int)
+                        or m.depth < 1 or m.depth > length):
+                        reason = "depth_unverified"
+                        break
+                    prev = seen_depths.get((m.chain, m.depth))
+                    if prev is not None and prev != bid:
+                        # A depth collision invalidates both competing records.
+                        invalid[prev] = "depth_collision"
+                        reason = "depth_collision"
+                        break
+                    curve = curves.get(m.chain)
+                    if curve is None:
+                        snapshot_getter = getattr(self._registry, "snapshot", None)
+                        snap = snapshot_getter(m.chain) if callable(snapshot_getter) else None
+                        original_len = len(snap.block_ids) if snap is not None else length
+                        if original_len < length:
+                            reason = "chain_length_mismatch"
+                            break
+                        curve = self._curves.get(original_len)
+                        if curve is None:
+                            reason = "profile_missing"
+                            break
+                        curves[m.chain] = curve
+                        lengths[m.chain] = length
+                    elif lengths[m.chain] != length:
+                        reason = "chain_length_mismatch"
+                        break
+                    when = access.get(m.chain)
+                    if when is None:
+                        when = self._observed_access_time(m.chain)
+                        if when is None:
+                            reason = "recency_missing"
+                            break
+                        if when > timestamp:
+                            reason = "future_observation"
+                            break
+                        access[m.chain] = when
+                    candidate_members.append((m.chain, m.depth))
+            if reason is not None:
+                invalid[bid] = reason
+                missing[reason] += 1
+                continue
+            memberships[bid] = tuple(candidate_members)
+            for chain, depth in candidate_members:
+                seen_depths[(chain, depth)] = bid
+
+        # Avoid treating incomplete chain relationships as a complete marginal
+        # loss estimate. A collision may have been discovered later in the pass.
+        for bid in tuple(invalid):
+            memberships.pop(bid, None)
+        # Ensure every chain considered has a validated pre-decision timestamp.
+        verified = set(memberships)
+        if any(bid not in verified for bid in baseline):
+            first = next(bid for bid in baseline if bid not in verified)
+            # The baseline itself contains unknown content. No unsupported
+            # counterfactual can be claimed better, so keep the exact A0 set.
+            return finish(invalid.get(first, "baseline_unverified"),
+                          ranked=len(verified), missing=missing)
+        if len(verified) == need:
+            return finish("no_verified_alternative", ranked=len(verified), missing=missing)
+
+        # Unknown blocks not selected by baseline remain unselected under this
+        # proposal. All victim sets are therefore content-verified, even if
+        # unrelated blocks elsewhere in the queue have no logical-chain proof.
+        involved = {chain for bid in verified for chain, _ in memberships[bid]}
+        base_cost = {c: curves[c].at(lengths[c]) for c in involved}
+        weights = {c: self._decay.weight(timestamp - access[c]) for c in involved}
 
         def loss(ids: Sequence[int]) -> float:
-            depths = dict(lengths)
-            for bid in ids:
-                for chain, depth in memberships[bid]:
-                    depths[chain] = min(depths[chain], depth - 1)
-            return sum(weights[c] * max(0.0, curve_by_chain[c].at(d) - base_cost[c])
-                       for c, d in depths.items())
+            prefixes = {c: lengths[c] for c in involved}
+            for block_id in ids:
+                for chain, depth in memberships[block_id]:
+                    prefixes[chain] = min(prefixes[chain], depth - 1)
+            return sum(weights[c] * max(0.0, curves[c].at(prefixes[c]) - base_cost[c])
+                       for c in involved)
 
         selected: list[int] = []
         exact_only = True
         for tier in (0, 1):
-            members = [bid for bid in eligible_order if tier_by_id[bid] == tier]
-            take = min(len(members), need - len(selected))
+            # The number required at each tier is fixed by A0's eligibility
+            # plan; unknown blocks never consume or receive a new victim slot.
+            take = sum(tier_by_id[bid] == tier for bid in baseline)
             if not take:
                 continue
+            members = [bid for bid in eligible_order
+                       if tier_by_id[bid] == tier and bid in verified]
+            if len(members) < take:
+                return finish("insufficient_verified_candidates", ranked=len(verified),
+                              missing=missing)
             if take == len(members):
                 selected.extend(members)
                 continue
             if math.comb(len(members), take) <= self._max_exact:
-                combinations = itertools.combinations(members, take)
-                best = min(combinations,
-                           key=lambda choice: (loss((*selected, *choice)),
-                                               tuple(by_id[v].lru_rank for v in choice)))
-                selected.extend(best)
+                options = itertools.combinations(members, take)
+                chosen = min(options,
+                             key=lambda choice: (loss((*selected, *choice)),
+                                                 tuple(by_id[v].lru_rank for v in choice)))
+                selected.extend(chosen)
             else:
                 exact_only = False
                 if len(members) * take > self._max_ops:
-                    return finish("search_budget_exceeded")
+                    return finish("search_budget_exceeded", ranked=len(verified), missing=missing)
                 remaining = set(members)
                 for _ in range(take):
-                    chosen = min(remaining,
-                                 key=lambda b: (loss((*selected, b)), by_id[b].lru_rank))
-                    selected.append(chosen)
-                    remaining.remove(chosen)
-        proposal = tuple(selected)
-        if len(proposal) != need or len(set(proposal)) != need:
-            return finish("selection_contract_failed")
-        baseline_loss = loss(baseline)
-        proposal_loss = loss(proposal)
-        if (set(proposal) == set(baseline)
-            or proposal_loss + self._min_gain >= baseline_loss):
-            return finish("baseline_no_verified_proxy_gain", None,
-                          baseline_loss, proposal_loss, len(eligible_order), exact_only)
-        return finish("selected_lower_proxy_loss", proposal,
-                      baseline_loss, proposal_loss, len(eligible_order), exact_only)
+                    pick = min(remaining,
+                               key=lambda bid: (loss((*selected, bid)), by_id[bid].lru_rank))
+                    selected.append(pick)
+                    remaining.remove(pick)
+        proposed = tuple(selected)
+        if len(proposed) != need or len(set(proposed)) != need:
+            return finish("selection_contract_failed", ranked=len(verified), missing=missing)
+        baseline_loss, proposed_loss = loss(baseline), loss(proposed)
+        if (set(proposed) == set(baseline)
+            or proposed_loss + self._min_gain >= baseline_loss):
+            return finish("baseline_no_verified_proxy_gain", base_loss=baseline_loss,
+                          proposed_loss=proposed_loss, ranked=len(verified), exact=exact_only,
+                          missing=missing)
+        mode = "selected_partial_coverage" if missing else "selected_lower_proxy_loss"
+        return finish(mode, proposed, baseline_loss, proposed_loss,
+                      len(verified), exact_only, missing)
