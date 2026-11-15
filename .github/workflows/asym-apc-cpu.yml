@@ -1,7 +1,7 @@
 name: AsymAPC experimental CPU smoke
 on:
   pull_request:
-    branches: [main]
+    branches: [main, experiment/asymcache-inspired-contiguous-apc]
     paths:
       - 'src/kvopt/costaware/asym_apc_native.py'
       - 'src/kvopt/costaware/a2_native.py'
