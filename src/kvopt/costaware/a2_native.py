@@ -9,6 +9,7 @@ victim order.  It never mutates a vLLM queue, block, hash table, or refcount.
 from __future__ import annotations
 
 from collections import Counter
+import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 
@@ -96,6 +97,20 @@ class A2NativeEvidenceAudit:
     chain_states: tuple[tuple[str, int, tuple[int, ...], int, str], ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class A2NativeAccessObservation:
+    """Access time bound to one proven native prefix content generation.
+
+    Timestamp is read from the actual Native prefix-snapshot event, not TTL,
+    an unqualified request log or an inferred future event.
+    """
+
+    timestamp: float
+    clock_domain: str
+    native_hash_process_id: str
+    content_hashes: tuple[str, ...]
+
+
 class A2NativeSnapshotRegistry:
     """Read-only Native content and chain proofs used at decision time.
 
@@ -112,12 +127,53 @@ class A2NativeSnapshotRegistry:
             tuple[str, str], set[tuple[str, int]]
         ] = {}
         self._reuse_by_chain: dict[str, A2NativeReuseState] = {}
+        self._access_by_chain: dict[str, A2NativeAccessObservation] = {}
         self.last_evidence_audit = A2NativeEvidenceAudit()
 
-    def observe(self, snapshot: A2NativeChainSnapshot) -> None:
+    def observe(
+        self,
+        snapshot: A2NativeChainSnapshot,
+        *,
+        observed_at: float | None = None,
+        clock_domain: str = "system_monotonic",
+    ) -> None:
+        """Record proven content and, optionally, the real access timestamp.
+
+        Existing A2 callers may omit observed_at without changing their
+        decision semantics. No clock timestamp is invented for them.
+        """
         if not isinstance(snapshot, A2NativeChainSnapshot):
             raise TypeError("snapshot must be A2NativeChainSnapshot")
         previous = self._chains.get(snapshot.chain_id)
+        if observed_at is not None:
+            if (
+                isinstance(observed_at, bool)
+                or not isinstance(observed_at, (float, int))
+                or not math.isfinite(observed_at)
+                or observed_at < 0
+            ):
+                raise ValueError("observed_at must be finite and nonnegative")
+            if not isinstance(clock_domain, str) or not clock_domain:
+                raise ValueError("clock_domain must be nonempty")
+            existing = self._access_by_chain.get(snapshot.chain_id)
+            if (
+                existing is not None
+                and existing.clock_domain == clock_domain
+                and existing.native_hash_process_id == snapshot.native_hash_process_id
+                and existing.content_hashes == snapshot.content_hashes
+                and observed_at < existing.timestamp
+            ):
+                raise ValueError("native access observations must be nondecreasing")
+            self._access_by_chain[snapshot.chain_id] = A2NativeAccessObservation(
+                timestamp=float(observed_at),
+                clock_domain=clock_domain,
+                native_hash_process_id=snapshot.native_hash_process_id,
+                content_hashes=snapshot.content_hashes,
+            )
+        elif previous != snapshot:
+            # A content generation changed without a matching access event.
+            # An old timestamp must not be reused for new content.
+            self._access_by_chain.pop(snapshot.chain_id, None)
         if previous is not None:
             self._remove_chain_memberships(previous)
         self._chains[snapshot.chain_id] = snapshot
@@ -131,6 +187,19 @@ class A2NativeSnapshotRegistry:
             self._memberships_by_content.setdefault(key, set()).add(
                 (snapshot.chain_id, depth)
             )
+
+    def last_access_observation(self, chain_id: str) -> A2NativeAccessObservation | None:
+        """Return an observed access bound to the current chain generation."""
+        fact = self._access_by_chain.get(chain_id)
+        snapshot = self._chains.get(chain_id)
+        if fact is None or snapshot is None:
+            return None
+        if (
+            fact.native_hash_process_id != snapshot.native_hash_process_id
+            or fact.content_hashes != snapshot.content_hashes
+        ):
+            return None
+        return fact
 
     def _remove_chain_memberships(self, snapshot: A2NativeChainSnapshot) -> None:
         for depth, content_hash in enumerate(snapshot.content_hashes, start=1):
