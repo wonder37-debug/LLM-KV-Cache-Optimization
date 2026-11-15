@@ -4,9 +4,12 @@ on:
     branches: [main]
     paths:
       - 'src/kvopt/costaware/asym_apc_native.py'
+      - 'src/kvopt/costaware/a2_native.py'
+      - 'scripts/spikes/phase2_minimal_observability_metal.py'
       - 'tests/test_asym_apc_native.py'
       - 'tests/test_asym_apc_repo_integration.py'
       - 'scripts/probes/asym_apc_native/**'
+      - 'docs/experiments/asym-apc-trusted-evidence.md'
       - '.github/workflows/asym-apc-cpu.yml'
   workflow_dispatch:
 jobs:
@@ -20,5 +23,6 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -e . pytest
       - run: python -m pytest -q tests/test_asym_apc_native.py tests/test_asym_apc_repo_integration.py
-      - run: python -m pytest -q tests/test_costaware_a2_native.py tests/test_continuum_retention_integration.py tests/test_continuum_pressure.py
+      - run: python -m pytest -q tests/test_costaware_a2_native.py tests/test_costaware_a2_evidence.py tests/test_costaware_a2_contract.py tests/test_continuum_retention_integration.py tests/test_continuum_pressure.py tests/test_continuum_vllm_observation_runner.py
+      - run: python -m compileall -q src/kvopt scripts/spikes/phase2_minimal_observability_metal.py
       - run: python scripts/probes/asym_apc_native/simulate.py --groups 160 --seed 20261115
