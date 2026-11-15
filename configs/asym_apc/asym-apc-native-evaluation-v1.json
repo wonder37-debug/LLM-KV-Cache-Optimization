@@ -1,0 +1,175 @@
+{
+  "schema_version": "asym_apc.native_evaluation_design.v1",
+  "scope": "EXPERIMENTAL_ASYM_APC_NATIVE_EVALUATION",
+  "execution_authorized": true,
+  "campaign_kind": "asym_apc_native_evaluation",
+  "primary_comparison": ["A0", "ASYM_APC"],
+  "system_baseline": "NATIVE_LRU",
+  "arms": ["NATIVE_LRU", "A0", "ASYM_APC"],
+  "runtime_repeats": 3,
+  "seeds": [20261101, 20261102, 20261103],
+  "block_size_tokens": 16,
+  "model": {
+    "name": "Qwen/Qwen2.5-Coder-1.5B-Instruct",
+    "revision": "dfbd7a05c3d0b6a52e2f8b0e0f0b8c1b1b7c5f4e"
+  },
+  "runtime": {
+    "backend_factory": "scripts.spikes.phase2_minimal_observability_metal:build_phase2_metal_observability_backend",
+    "runtime_mode": "vllm-cuda-observability",
+    "gpu_memory_utilization": 0.55,
+    "max_new_tokens": 1,
+    "temperature": 0.0,
+    "enforce_eager": true,
+    "max_num_batched_tokens": 8192
+  },
+  "asym_apc": {
+    "profile_path": "results/asym_apc/calibration/prefill-calibration-profile.json",
+    "alpha_seconds": 60.0,
+    "beta_seconds": 12.0,
+    "knee_seconds": 60.0,
+    "tau_seconds": 1.0,
+    "max_exact_subsets": 3000,
+    "max_greedy_operations": 50000,
+    "min_proxy_gain_ms": 0.001
+  },
+  "pressure_regimes": [
+    {"id": "low", "initial_shortage_blocks": 2},
+    {"id": "medium", "initial_shortage_blocks": 6},
+    {"id": "high", "initial_shortage_blocks": 12}
+  ],
+  "execution_subsets": {
+    "screening": {
+      "case_ids": ["w1-long-prefix-reuse", "w2-multi-session-competition"],
+      "pressure_regime_ids": ["medium", "high"],
+      "runtime_repeats": 2
+    },
+    "full": {
+      "case_ids": [
+        "w1-long-prefix-reuse",
+        "w2-multi-session-competition",
+        "w3-short-tool-gap",
+        "w4-long-tool-gap",
+        "w5-shared-prefix",
+        "w6-mixed-context-lengths"
+      ],
+      "pressure_regime_ids": ["low", "medium", "high"],
+      "runtime_repeats": 3
+    }
+  },
+  "cases": [
+    {
+      "case_id": "w1-long-prefix-reuse",
+      "kind": "representative",
+      "description": "Two Agent sessions each replay a long stable system prefix across turns.",
+      "pressure_prompt_tokens": 1024,
+      "programs": {
+        "w1-a": [
+          {"arrival_offset_seconds": 0.0, "segments": [["w1-a-system", 1024], ["w1-a-turn1", 256]], "tool_gap_after_seconds": 2.0},
+          {"arrival_offset_seconds": 2.5, "segments": [["w1-a-system", 1024], ["w1-a-turn2", 256]], "tool_gap_after_seconds": 18.0},
+          {"arrival_offset_seconds": 21.0, "segments": [["w1-a-system", 1024], ["w1-a-turn3", 256]], "terminal": true}
+        ],
+        "w1-b": [
+          {"arrival_offset_seconds": 0.5, "segments": [["w1-b-system", 768], ["w1-b-turn1", 256]], "tool_gap_after_seconds": 3.0},
+          {"arrival_offset_seconds": 4.0, "segments": [["w1-b-system", 768], ["w1-b-turn2", 256]], "tool_gap_after_seconds": 24.0},
+          {"arrival_offset_seconds": 28.5, "segments": [["w1-b-system", 768], ["w1-b-turn3", 256]], "terminal": true}
+        ]
+      }
+    },
+    {
+      "case_id": "w2-multi-session-competition",
+      "kind": "representative",
+      "description": "Four sessions compete for capacity; only two long prefixes can stay resident.",
+      "pressure_prompt_tokens": 1280,
+      "programs": {
+        "w2-a": [
+          {"arrival_offset_seconds": 0.0, "segments": [["w2-a-system", 768], ["w2-a-turn1", 128]], "tool_gap_after_seconds": 6.0},
+          {"arrival_offset_seconds": 9.0, "segments": [["w2-a-system", 768], ["w2-a-turn2", 128]], "terminal": true}
+        ],
+        "w2-b": [
+          {"arrival_offset_seconds": 0.4, "segments": [["w2-b-system", 768], ["w2-b-turn1", 128]], "tool_gap_after_seconds": 6.0},
+          {"arrival_offset_seconds": 9.5, "segments": [["w2-b-system", 768], ["w2-b-turn2", 128]], "terminal": true}
+        ],
+        "w2-c": [
+          {"arrival_offset_seconds": 0.8, "segments": [["w2-c-system", 768], ["w2-c-turn1", 128]], "tool_gap_after_seconds": 6.0},
+          {"arrival_offset_seconds": 10.0, "segments": [["w2-c-system", 768], ["w2-c-turn2", 128]], "terminal": true}
+        ],
+        "w2-d": [
+          {"arrival_offset_seconds": 1.2, "segments": [["w2-d-system", 768], ["w2-d-turn1", 128]], "tool_gap_after_seconds": 6.0},
+          {"arrival_offset_seconds": 10.5, "segments": [["w2-d-system", 768], ["w2-d-turn2", 128]], "terminal": true}
+        ]
+      }
+    },
+    {
+      "case_id": "w3-short-tool-gap",
+      "kind": "representative",
+      "description": "Return requests follow a 1.5 s tool gap; reuse is highly likely for both sessions.",
+      "pressure_prompt_tokens": 1024,
+      "programs": {
+        "w3-a": [
+          {"arrival_offset_seconds": 0.0, "segments": [["w3-a-system", 512], ["w3-a-turn1", 256]], "tool_gap_after_seconds": 1.5},
+          {"arrival_offset_seconds": 1.9, "segments": [["w3-a-system", 512], ["w3-a-turn2", 256]], "terminal": true}
+        ],
+        "w3-b": [
+          {"arrival_offset_seconds": 0.4, "segments": [["w3-b-system", 512], ["w3-b-turn1", 256]], "tool_gap_after_seconds": 1.5},
+          {"arrival_offset_seconds": 2.4, "segments": [["w3-b-system", 512], ["w3-b-turn2", 256]], "terminal": true}
+        ]
+      }
+    },
+    {
+      "case_id": "w4-long-tool-gap",
+      "kind": "representative",
+      "description": "Return requests follow a 45 s tool gap; reuse likelihood is genuinely uncertain.",
+      "pressure_prompt_tokens": 1024,
+      "programs": {
+        "w4-a": [
+          {"arrival_offset_seconds": 0.0, "segments": [["w4-a-system", 512], ["w4-a-turn1", 256]], "tool_gap_after_seconds": 45.0},
+          {"arrival_offset_seconds": 45.4, "segments": [["w4-a-system", 512], ["w4-a-turn2", 256]], "terminal": true}
+        ],
+        "w4-b": [
+          {"arrival_offset_seconds": 0.6, "segments": [["w4-b-system", 512], ["w4-b-turn1", 256]], "tool_gap_after_seconds": 45.0},
+          {"arrival_offset_seconds": 46.0, "segments": [["w4-b-system", 512], ["w4-b-turn2", 256]], "terminal": true}
+        ]
+      }
+    },
+    {
+      "case_id": "w5-shared-prefix",
+      "kind": "stress",
+      "description": "Three sessions share one repository preamble; evicting a shared block damages several chains.",
+      "pressure_prompt_tokens": 1152,
+      "programs": {
+        "w5-a": [
+          {"arrival_offset_seconds": 0.0, "segments": [["w5-shared-repo", 640], ["w5-a-own", 192]], "tool_gap_after_seconds": 4.0},
+          {"arrival_offset_seconds": 4.4, "segments": [["w5-shared-repo", 640], ["w5-a-own", 192]], "terminal": true}
+        ],
+        "w5-b": [
+          {"arrival_offset_seconds": 0.3, "segments": [["w5-shared-repo", 640], ["w5-b-own", 192]], "tool_gap_after_seconds": 4.0},
+          {"arrival_offset_seconds": 4.8, "segments": [["w5-shared-repo", 640], ["w5-b-own", 192]], "terminal": true}
+        ],
+        "w5-c": [
+          {"arrival_offset_seconds": 0.6, "segments": [["w5-shared-repo", 640], ["w5-c-own", 192]], "tool_gap_after_seconds": 4.0},
+          {"arrival_offset_seconds": 5.2, "segments": [["w5-shared-repo", 640], ["w5-c-own", 192]], "terminal": true}
+        ]
+      }
+    },
+    {
+      "case_id": "w6-mixed-context-lengths",
+      "kind": "stress",
+      "description": "A 1536-token session competes with two 256-token sessions under the same pressure.",
+      "pressure_prompt_tokens": 1152,
+      "programs": {
+        "w6-long": [
+          {"arrival_offset_seconds": 0.0, "segments": [["w6-long-system", 1280], ["w6-long-turn1", 256]], "tool_gap_after_seconds": 5.0},
+          {"arrival_offset_seconds": 5.4, "segments": [["w6-long-system", 1280], ["w6-long-turn2", 256]], "terminal": true}
+        ],
+        "w6-short-a": [
+          {"arrival_offset_seconds": 0.3, "segments": [["w6-short-a-system", 128], ["w6-short-a-turn1", 128]], "tool_gap_after_seconds": 5.0},
+          {"arrival_offset_seconds": 5.8, "segments": [["w6-short-a-system", 128], ["w6-short-a-turn1", 128]], "terminal": true}
+        ],
+        "w6-short-b": [
+          {"arrival_offset_seconds": 0.6, "segments": [["w6-short-b-system", 128], ["w6-short-b-turn1", 128]], "tool_gap_after_seconds": 5.0},
+          {"arrival_offset_seconds": 6.2, "segments": [["w6-short-b-system", 128], ["w6-short-b-turn1", 128]], "terminal": true}
+        ]
+      }
+    }
+  ]
+}

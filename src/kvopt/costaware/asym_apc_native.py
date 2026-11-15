@@ -156,6 +156,11 @@ class AsymAPCNativeCoordinator:
         self._last_access: dict[str, float] = {}
         self.last_audit: AsymAPCAudit | None = None
 
+    @property
+    def clock_domain(self) -> str:
+        """Clock domain every injected timestamp must belong to."""
+        return self._clock_domain
+
     def observe_chain_access(self, chain_id: str, timestamp: float) -> None:
         """Ingest a real request/prefix observation; not a future/TTL deadline."""
         if not chain_id:

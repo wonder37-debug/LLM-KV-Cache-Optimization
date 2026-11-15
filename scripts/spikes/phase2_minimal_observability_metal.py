@@ -60,6 +60,19 @@ from kvopt.costaware.a2_native import (
     A2NativeSnapshotRegistry,
 )
 from kvopt.costaware.a3_native import A3NativeSelectionCoordinator
+from kvopt.costaware.asym_apc_runner import (
+    POLICY_NAME as ASYM_APC_POLICY_NAME,
+    AsymAPCDecision,
+    AsymAPCProfile,
+    InstrumentedAsymAPCCoordinator,
+    PhysicalEvictionReconciler,
+    build_asym_apc_arm,
+    capture_native_pool_state,
+    check_observed_reuse,
+    expected_reusable_prefix_by_chain,
+    fallback_summary,
+    parse_policy_config as parse_asym_apc_policy_config,
+)
 from kvopt.costaware.e0_native import E0NativeSelectionCoordinator
 from kvopt.costaware.entry_depth import ChainDepthIndex
 from kvopt.profiling.experiment_events import (
@@ -98,6 +111,7 @@ from kvopt.workload.phase2c_native_pilot import (
 _TARGET_PREFIX_TOKENS = 256
 _PRESSURE_TOKENS = 512
 _PHASE3_CAMPAIGN_KIND = "phase3_final_evaluation"
+_PHASE2E_KIND = "phase2e_non_holdout_research_discovery"
 _PHASE2G_A1_CAMPAIGN_KINDS = frozenset(
     {
         "continuum_native_costaware_bounded_evaluation",
@@ -122,6 +136,8 @@ _PHASE2G_A2_CAMPAIGN_KINDS = frozenset(
 _PHASE2I_A3_CAMPAIGN_KINDS = frozenset(
     {"phase2i_a3_native_integration", _PHASE3_CAMPAIGN_KIND}
 )
+#: The experimental AsymCache-inspired arm is admitted only by its own campaign.
+_ASYM_APC_CAMPAIGN_KINDS = frozenset({"asym_apc_native_evaluation"})
 _PHASE2G_UNIQUE_PROTECTED_BLOCK_CAMPAIGN_KINDS = frozenset(
     {
         "continuum_w1b_prefill_profile",
@@ -143,6 +159,10 @@ def _phase2g_a1_campaign_allowed(campaign_kind: object) -> bool:
 
 def _phase2i_a3_campaign_allowed(campaign_kind: object) -> bool:
     return campaign_kind in _PHASE2I_A3_CAMPAIGN_KINDS
+
+
+def _asym_apc_campaign_allowed(campaign_kind: object) -> bool:
+    return campaign_kind in _ASYM_APC_CAMPAIGN_KINDS
 
 
 def _phase2g_unique_protected_block_campaign_allowed(campaign_kind: object) -> bool:
@@ -225,12 +245,10 @@ def _retention_mode_for_config(config: Mapping[str, object]) -> RetentionMode:
     policy = config.get("policy")
     campaign_kind = config.get("campaign_kind")
     if policy == "native-lru":
-        if campaign_kind != "phase2e_non_holdout_research_discovery":
+        if campaign_kind not in (_PHASE2E_KIND, *_ASYM_APC_CAMPAIGN_KINDS):
             raise ValueError("native-lru baseline is restricted to Phase 2E discovery")
         return RetentionMode.NATIVE
-    if campaign_kind == "phase2e_non_holdout_research_discovery" and policy != (
-        "continuum-baseline"
-    ):
+    if campaign_kind == _PHASE2E_KIND and policy != "continuum-baseline":
         raise ValueError("Phase 2E policy must be native-lru or continuum-baseline")
     return RetentionMode.CONTROLLED
 
@@ -734,6 +752,9 @@ class _ObservedRetentionIntegration:
         phase2g_a2_tau_seconds: float = 30.0,
         phase2g_a2_registry: A2NativeSnapshotRegistry | None = None,
         phase2i_a3_depth_index: ChainDepthIndex | None = None,
+        asym_apc_arm: InstrumentedAsymAPCCoordinator | None = None,
+        asym_apc_reconciler: PhysicalEvictionReconciler | None = None,
+        asym_apc_pool_provider: Any = None,
         event_index: _IndexedEventSink | None = None,
         sink: ExperimentEventSink | None = None,
         clock_domain: str = "system_monotonic",
@@ -796,10 +817,26 @@ class _ObservedRetentionIntegration:
             and event_index is not None
             else None
         )
-        if phase2g_block_policy not in {"A0", "A2"}:
-            raise ValueError("phase2g_block_policy must be A0 or A2")
+        if phase2g_block_policy not in {"A0", "A2", ASYM_APC_POLICY_NAME}:
+            raise ValueError(
+                "phase2g_block_policy must be A0, A2 or ASYM_APC"
+            )
         if phase2g_block_policy == "A2" and phase2g_a2_registry is None:
             raise ValueError("A2 block policy requires a native snapshot registry")
+        if phase2g_block_policy == ASYM_APC_POLICY_NAME:
+            if asym_apc_arm is None or asym_apc_reconciler is None:
+                raise ValueError(
+                    "ASYM_APC block policy requires the instrumented arm and reconciler"
+                )
+        elif asym_apc_arm is not None or asym_apc_reconciler is not None:
+            raise ValueError(
+                "the AsymAPC arm must not be constructed for another block policy"
+            )
+        self._asym_apc_arm = asym_apc_arm
+        self._asym_apc_reconciler = asym_apc_reconciler
+        self._asym_apc_pool_provider = asym_apc_pool_provider
+        if asym_apc_arm is not None and phase2g_a2_registry is None:
+            raise ValueError("ASYM_APC requires native content evidence")
         self._a2_coordinator = (
             A2NativeSelectionCoordinator(
                 phase2g_a2_registry,
@@ -820,7 +857,9 @@ class _ObservedRetentionIntegration:
             selection_coordinator=(
                 self._a3_coordinator or self._e0_coordinator or self._a1_coordinator
             ),
-            block_selection_coordinator=self._a2_coordinator,
+            block_selection_coordinator=(
+                self._a2_coordinator or self._asym_apc_arm
+            ),
         )
         self.last_selected_block_ids: tuple[int, ...] = ()
         self._decision_sequence = 0
@@ -829,6 +868,7 @@ class _ObservedRetentionIntegration:
         self._selection_plans: list[dict[str, object]] = []
         self._pending_physical_plans: list[dict[str, object]] = []
         self._selection_awaiting_native_return: dict[str, object] | None = None
+        self._asym_apc_expectations: dict[str, int] = {}
 
     def _begin_execution_context(self, context: Mapping[str, object]) -> None:
         if self._active_execution_context is not None:
@@ -950,6 +990,11 @@ class _ObservedRetentionIntegration:
             self._pending_physical_plans.remove(plan)
         if self._selection_awaiting_native_return is not None:
             raise RuntimeError("Native selection return was not observed before context close")
+        if self._asym_apc_reconciler is not None and self._asym_apc_reconciler.has_pending:
+            self._settle_asym_apc_reconciliation(
+                pool_state=self._capture_native_pool_state(),
+                phase="context_close",
+            )
         self._active_execution_context = None
 
     def end_pressure_context(self) -> None:
@@ -1200,6 +1245,99 @@ class _ObservedRetentionIntegration:
             )
         )
 
+    def _capture_native_pool_state(self) -> dict[str, object]:
+        """Read the Native BlockPool state through the captured receiver."""
+        provider = self._asym_apc_pool_provider
+        pool = None
+        if provider is not None:
+            pool = provider() if callable(provider) else provider
+        return capture_native_pool_state(pool)
+
+    def _observe_asym_apc_decision(self, context: Mapping[str, object]) -> None:
+        """Emit the structured AsymAPC decision audit and bind reconciliation."""
+        arm = self._asym_apc_arm
+        reconciler = self._asym_apc_reconciler
+        if arm is None or reconciler is None:
+            return
+        decision = arm.pop_pending_decision()
+        if decision is None:
+            return
+        reconciler.attach_decision(decision, decision.audit.selected)
+        if self._sink is not None:
+            self._sink.emit(
+                ExperimentEvent.create(
+                    event_type="ASYM_APC_BLOCK_DECISION",
+                    timestamp=self._clock.now(),
+                    clock_domain=self._clock_domain,
+                    source="asym_apc.native",
+                    payload={**decision.payload(), **dict(context)},
+                )
+            )
+        self._settle_asym_apc_reconciliation(
+            pool_state=self._capture_native_pool_state(),
+            phase="decision_return",
+        )
+
+    def _settle_asym_apc_reconciliation(
+        self, *, pool_state: Mapping[str, object], phase: str
+    ) -> None:
+        reconciler = self._asym_apc_reconciler
+        if reconciler is None:
+            return
+        record = reconciler.settle(pool_state_after=pool_state, phase=phase)
+        if record is None:
+            return
+        self._asym_apc_expectations = expected_reusable_prefix_by_chain(
+            self._content_registry, tuple(record["physically_evicted_block_ids"])
+        )
+        if self._sink is not None:
+            self._sink.emit(
+                ExperimentEvent.create(
+                    event_type="ASYM_APC_PHYSICAL_OUTCOME",
+                    timestamp=self._clock.now(),
+                    clock_domain=self._clock_domain,
+                    source="asym_apc.native",
+                    payload=record,
+                )
+            )
+
+    def observe_native_hash_eviction(self, block_id: int, content_hash: str | None) -> None:
+        """Forward one Native hashed eviction to the AsymAPC reconciler.
+
+        This is evidence only: it never changes the retained selection.
+        """
+        if self._asym_apc_reconciler is None:
+            return
+        self._asym_apc_reconciler.observe_eviction(block_id, content_hash)
+
+    def asym_apc_reuse_check(self, chain_id: str, observed_blocks: int) -> None:
+        """Compare the next observed prefix depth against the expected depth."""
+        expectations = self._asym_apc_expectations
+        if not expectations or chain_id not in expectations:
+            return
+        expected = expectations.pop(chain_id)
+        result = check_observed_reuse({chain_id: expected}, {chain_id: observed_blocks})
+        if self._sink is not None:
+            self._sink.emit(
+                ExperimentEvent.create(
+                    event_type="ASYM_APC_NEXT_REQUEST_REUSE_CHECK",
+                    timestamp=self._clock.now(),
+                    clock_domain=self._clock_domain,
+                    source="asym_apc.native",
+                    payload={
+                        "chain_id": chain_id,
+                        "expected_reusable_prefix_blocks": expected,
+                        "observed_reusable_prefix_blocks": observed_blocks,
+                        **result,
+                    },
+                )
+            )
+
+    def asym_apc_fallback_summary(self) -> dict[str, object] | None:
+        if self._asym_apc_arm is None:
+            return None
+        return fallback_summary(self._asym_apc_arm.decisions)
+
     def apply_pressure(self, **kwargs: object) -> Any:
         self._decision_sequence += 1
         decision_id = f"native-entry-release-{self._decision_sequence}"
@@ -1234,12 +1372,26 @@ class _ObservedRetentionIntegration:
             return result
         self._forced_release_observer.begin_decision(context)
         self._active_decision_id = decision_id
+        if self._asym_apc_reconciler is not None:
+            self._asym_apc_reconciler.open_context(
+                pool_state=self._capture_native_pool_state(),
+                timestamp=float(self._clock.now()),
+            )
         try:
             result = self._delegate.apply_pressure(**kwargs)
+        except BaseException:
+            if self._asym_apc_reconciler is not None:
+                self._asym_apc_reconciler.settle(
+                    pool_state_after=self._capture_native_pool_state(),
+                    phase="context_close",
+                )
+            raise
         finally:
             self._active_decision_id = None
             self._forced_release_observer.end_decision()
         self.last_selected_block_ids = tuple(result.selected_block_ids)
+        if self._asym_apc_arm is not None:
+            self._observe_asym_apc_decision(context)
         if self._a1_coordinator is not None and self._sink is not None:
             self._sink.emit(
                 ExperimentEvent.create(
@@ -1576,8 +1728,9 @@ class MinimalMetalObservabilityBackend:
             _PHASE3_CAMPAIGN_KIND
         ):
             raise ValueError("E0 native release is restricted to Phase 3")
-        if phase2g_release_policy == "N0" and config.get("campaign_kind") != (
-            _PHASE3_CAMPAIGN_KIND
+        if phase2g_release_policy == "N0" and config.get("campaign_kind") not in (
+            _PHASE3_CAMPAIGN_KIND,
+            *_ASYM_APC_CAMPAIGN_KINDS,
         ):
             raise ValueError("N0 no-op release is restricted to Phase 3")
         if phase2g_release_policy in {"A3", "E0"} and not self._content_evidence_enabled:
@@ -1585,20 +1738,64 @@ class MinimalMetalObservabilityBackend:
         phase2g_a1_lambda = float(options.get("phase2g_a1_lambda", 0.5))
         phase2g_a1_tau_seconds = float(options.get("phase2g_a1_tau_seconds", 30.0))
         phase2g_block_policy = options.get("phase2g_block_policy", "A0")
-        if phase2g_block_policy not in {"A0", "A2"}:
-            raise ValueError("backend_options.phase2g_block_policy must be A0 or A2")
+        if phase2g_block_policy not in {"A0", "A2", ASYM_APC_POLICY_NAME}:
+            raise ValueError(
+                "backend_options.phase2g_block_policy must be A0, A2 or ASYM_APC"
+            )
         if phase2g_block_policy == "A2" and not _phase2g_a2_campaign_allowed(
             config.get("campaign_kind")
         ):
             raise ValueError("A2 native block selection is restricted to authorized campaigns")
         if phase2g_block_policy == "A2" and not self._content_evidence_enabled:
             raise ValueError("A2 native block selection requires content evidence mode")
+        asym_apc_arm = None
+        asym_apc_profile: AsymAPCProfile | None = None
+        asym_apc_reconciler: PhysicalEvictionReconciler | None = None
+        asym_apc_config_payload: dict[str, object] | None = None
+        if phase2g_block_policy == ASYM_APC_POLICY_NAME:
+            if not _asym_apc_campaign_allowed(config.get("campaign_kind")):
+                raise ValueError(
+                    "ASYM_APC native block selection is restricted to the "
+                    "asym_apc_native_evaluation campaign"
+                )
+            if not self._content_evidence_enabled:
+                raise ValueError("ASYM_APC requires native content evidence mode")
+            if self._h2_interventions or self._h2_native_mechanism_only:
+                raise ValueError(
+                    "ASYM_APC cannot be combined with H2 native prefix interventions"
+                )
+            asym_apc_config = parse_asym_apc_policy_config(
+                options.get("asym_apc"),
+                repo_root=_repo_root(),
+                clock_domain=self._lifecycle_clock_domain,
+            )
+            asym_apc_config_payload = asym_apc_config.describe()
+            required_lengths = tuple(sorted(set(self._program_prefix_tokens.values())))
+            if required_lengths:
+                from kvopt.costaware.asym_apc_runner import load_calibration_profile
+
+                _profile_preview = load_calibration_profile(
+                    asym_apc_config.profile_path,
+                    expected_sha256=asym_apc_config.profile_sha256,
+                )
+                _profile_preview.require(required_lengths)
+                asym_apc_profile = _profile_preview
         phase2g_a2_tau_seconds = _positive_float(
             options.get("phase2g_a2_tau_seconds", 30.0),
             "backend_options.phase2g_a2_tau_seconds",
         )
         self._phase2g_a2_registry = A2NativeSnapshotRegistry()
         self._phase2i_a3_depth_index = ChainDepthIndex()
+        if phase2g_block_policy == ASYM_APC_POLICY_NAME:
+            asym_apc_arm, asym_apc_profile, asym_apc_reconciler = build_asym_apc_arm(
+                registry=self._phase2g_a2_registry,
+                config=asym_apc_config,
+                context_provider=lambda: (
+                    self._retention_integration.current_decision_context()
+                    if getattr(self, "_retention_integration", None) is not None
+                    else {}
+                ),
+            )
         phase2g_a2_identity_mode = options.get("phase2g_a2_identity_mode", "normal")
         if phase2g_a2_identity_mode not in {"normal", "missing", "stale"}:
             raise ValueError(
@@ -1764,6 +1961,9 @@ class MinimalMetalObservabilityBackend:
             phase2g_a2_tau_seconds=phase2g_a2_tau_seconds,
             phase2g_a2_registry=self._phase2g_a2_registry,
             phase2i_a3_depth_index=self._phase2i_a3_depth_index,
+            asym_apc_arm=asym_apc_arm,
+            asym_apc_reconciler=asym_apc_reconciler,
+            asym_apc_pool_provider=lambda: self._native_pool_capture.pool,
             event_index=self._event_index,
             sink=sink,
             clock_domain=(
@@ -2135,6 +2335,24 @@ class MinimalMetalObservabilityBackend:
                     "phase2g_a2_identity_mode": (
                         self._phase2g_a2_identity_mode if phase2g_block_policy == "A2" else None
                     ),
+                    "asym_apc_policy": asym_apc_config_payload,
+                    "asym_apc_profile": (
+                        None
+                        if asym_apc_profile is None
+                        else {
+                            "path": str(asym_apc_profile.path),
+                            "sha256": asym_apc_profile.sha256,
+                            "covered_lengths": list(asym_apc_profile.covered_lengths),
+                            "block_size": asym_apc_profile.block_size,
+                            "provenance": dict(asym_apc_profile.provenance),
+                        }
+                    ),
+                    "asym_apc_claim_boundary": (
+                        "experimental contiguous-prefix block selection under a "
+                        "measured prefill cost curve; not the original AsymCache"
+                        if phase2g_block_policy == ASYM_APC_POLICY_NAME
+                        else None
+                    ),
                 },
             )
         )
@@ -2147,6 +2365,13 @@ class MinimalMetalObservabilityBackend:
         physical_attribution = self._retention_integration.match_physical_eviction(
             observation
         )
+        # Evidence-only forwarder; alternative integration objects (including test
+        # doubles) may not implement it, and skipping it changes no policy decision.
+        forward = getattr(
+            self._retention_integration, "observe_native_hash_eviction", None
+        )
+        if callable(forward):
+            forward(observation.block_id, observation.native_cache_key_before)
         self._phase2g_a2_registry.observe_eviction(
             observation.block_id,
             content_hash=observation.native_cache_key_before,
@@ -2607,6 +2832,10 @@ class MinimalMetalObservabilityBackend:
             )
             if self._phase2g_a2_identity_mode == "stale":
                 self._phase2g_a2_registry.observe_eviction(block_ids[0])
+        self._retention_integration.asym_apc_reuse_check(
+            f"{request.program_id}:{prefix.canonical_value}",
+            token_count // _BLOCK_SIZE,
+        )
         return prefix, token_count, blocks, tuple(block_ids), tuple(hashes)
 
     def _apply_h2_intervention(
