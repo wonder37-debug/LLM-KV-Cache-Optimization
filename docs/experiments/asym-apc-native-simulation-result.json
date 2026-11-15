@@ -1,0 +1,26 @@
+{
+  "status": "SYNTHETIC_CPU_ONLY",
+  "no_native_gpu_or_real_trace_claim": true,
+  "seed": 20261115,
+  "independent_synthetic_groups": 160,
+  "blocks_per_chain": 8,
+  "block_size_tokens": 16,
+  "decision_count": 160,
+  "victim_set_divergence_count": 160,
+  "group_win_tie_loss": [
+    59,
+    93,
+    8
+  ],
+  "a0_realized_recompute_tokens": 7552,
+  "ours_realized_recompute_tokens": 1920,
+  "a0_realized_prefill_proxy_ms": 448.4,
+  "ours_realized_prefill_proxy_ms": 60.45,
+  "selected_predicted_gain_proxy_ms": 209.944464,
+  "assumptions": [
+    "Two independent sessions and depth-ordered free queue per session",
+    "Profile is an invented monotone quadratic, not measured GPU timing",
+    "Hidden future returns are stochastic and correlated with elapsed time",
+    "No scheduler, preemption, real refcount churn, queueing or model inference"
+  ]
+}
