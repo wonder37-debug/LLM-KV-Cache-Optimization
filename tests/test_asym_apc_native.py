@@ -135,8 +135,11 @@ def test_missing_identity_and_mismatched_content_fall_back():
 def test_future_observations_are_not_permitted():
     candidates, preparation, coordinator = build_fixture()
     coordinator.observe_chain_access('B', 150)
-    assert decide(coordinator, candidates, preparation) == (1,)
-    assert coordinator.last_audit.reason == 'future_observation'
+    # A future-dated *unselected* chain is excluded without suppressing
+    # the verified A-chain decision. It is never consumed as a feature.
+    assert decide(coordinator, candidates, preparation) == (4,)
+    assert coordinator.last_audit.reason == 'selected_partial_coverage'
+    assert dict(coordinator.last_audit.missing_reasons)['future_observation'] == 4
     with pytest.raises(ValueError):
         coordinator.observe_chain_access('B', 149)
 
@@ -248,3 +251,78 @@ def test_rejected_tier_order_cannot_use_fake_eligibility():
     prep = DummyPreparation([8, 1], tier1=[1])
     assert decide(coordinator, candidates, prep) == (8,)
     assert coordinator.last_audit.reason == 'tier_order_mismatch'
+
+
+# Missing evidence in an *unselected* candidate no longer poisons an entire
+# decision. The unknown candidate is never promoted to a new victim.
+def test_unverified_competitor_outside_baseline_does_not_force_global_fallback():
+    candidates, preparation, coordinator = build_fixture()
+    candidates[-1] = EvictionCandidate(8, 0, True, 8, None)
+    assert decide(coordinator, candidates, preparation) == (4,)
+    assert coordinator.last_audit.reason == 'selected_partial_coverage'
+    assert dict(coordinator.last_audit.missing_reasons)['content_unverified'] == 1
+    assert 8 not in coordinator.last_audit.selected
+
+
+def test_missing_competitor_recency_does_not_force_global_fallback():
+    candidates, preparation, coordinator = build_fixture()
+    coordinator._last_access.pop('B')
+    assert decide(coordinator, candidates, preparation) == (4,)
+    assert dict(coordinator.last_audit.missing_reasons)['recency_missing'] == 4
+
+
+def test_missing_competitor_profile_does_not_force_global_fallback():
+    candidates, preparation, coordinator = build_fixture()
+    coordinator._registry.req.chain_length['B'] = 5
+    assert decide(coordinator, candidates, preparation) == (4,)
+    assert coordinator.last_audit.reason == 'selected_partial_coverage'
+    assert dict(coordinator.last_audit.missing_reasons)['profile_missing'] == 4
+
+
+def test_unknown_baseline_victim_is_never_replaced_or_priced_as_free():
+    candidates, preparation, coordinator = build_fixture()
+    candidates[0] = EvictionCandidate(1, 0, True, 1, None)
+    assert decide(coordinator, candidates, preparation) == (1,)
+    assert coordinator.last_audit.reason == 'content_unverified'
+    assert coordinator.last_audit.baseline_proxy_ms is None
+
+
+def test_registry_monotonic_access_observation_replaces_manual_recency():
+    candidates, preparation, coordinator = build_fixture(reuse=False)
+    snapshots = {
+        chain: SimpleNamespace(native_hash_process_id='proc',
+                               content_hashes=('a', 'b'), block_ids=(0, 1, 2, 3))
+        for chain in ('A', 'B')
+    }
+    coordinator._registry.snapshot = lambda chain: snapshots[chain]
+    coordinator._registry.last_access_observation = lambda chain: SimpleNamespace(
+        timestamp=50 if chain == 'A' else 60,
+        clock_domain='system_monotonic',
+        native_hash_process_id='proc',
+        content_hashes=('a', 'b'),
+    )
+    assert decide(coordinator, candidates, preparation) == (4,)
+    assert coordinator.last_audit.reason == 'selected_lower_proxy_loss'
+    assert coordinator.last_audit.missing_reasons == ()
+
+
+def test_registry_observation_wrong_clock_cannot_be_trusted():
+    candidates, preparation, coordinator = build_fixture(reuse=False)
+    coordinator._registry.snapshot = lambda chain: SimpleNamespace(
+        native_hash_process_id='proc', content_hashes=('a',), block_ids=(1, 2, 3, 4))
+    coordinator._registry.last_access_observation = lambda chain: SimpleNamespace(
+        timestamp=60, clock_domain='replay_fake', native_hash_process_id='proc',
+        content_hashes=('a',))
+    assert decide(coordinator, candidates, preparation) == (1,)
+    assert coordinator.last_audit.reason == 'recency_missing'
+
+
+def test_registry_observation_old_content_generation_is_rejected():
+    candidates, preparation, coordinator = build_fixture(reuse=False)
+    coordinator._registry.snapshot = lambda chain: SimpleNamespace(
+        native_hash_process_id='new', content_hashes=('a',), block_ids=(1, 2, 3, 4))
+    coordinator._registry.last_access_observation = lambda chain: SimpleNamespace(
+        timestamp=60, clock_domain='system_monotonic', native_hash_process_id='old',
+        content_hashes=('a',))
+    assert decide(coordinator, candidates, preparation) == (1,)
+    assert coordinator.last_audit.reason == 'recency_missing'

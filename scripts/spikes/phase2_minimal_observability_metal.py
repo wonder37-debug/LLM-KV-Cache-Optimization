@@ -2601,7 +2601,9 @@ class MinimalMetalObservabilityBackend:
                     block_ids=tuple(block_ids),
                     content_hashes=content_hashes,
                     native_hash_process_id=str(os.getpid()),
-                )
+                ),
+                observed_at=snapshot_timestamp,
+                clock_domain="system_monotonic",
             )
             if self._phase2g_a2_identity_mode == "stale":
                 self._phase2g_a2_registry.observe_eviction(block_ids[0])
