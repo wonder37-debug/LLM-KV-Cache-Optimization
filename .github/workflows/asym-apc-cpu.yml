@@ -20,4 +20,5 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -e . pytest
       - run: python -m pytest -q tests/test_asym_apc_native.py tests/test_asym_apc_repo_integration.py
+      - run: python -m pytest -q tests/test_costaware_a2_native.py tests/test_continuum_retention_integration.py tests/test_continuum_pressure.py
       - run: python scripts/probes/asym_apc_native/simulate.py --groups 160 --seed 20261115
