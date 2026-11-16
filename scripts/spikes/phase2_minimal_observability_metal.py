@@ -145,6 +145,7 @@ _PHASE2G_UNIQUE_PROTECTED_BLOCK_CAMPAIGN_KINDS = frozenset(
         "phase2g_a2_prefill_profile_bridge_control",
         *_PHASE2G_A2_CAMPAIGN_KINDS,
         *_PHASE2I_A3_CAMPAIGN_KINDS,
+        *_ASYM_APC_CAMPAIGN_KINDS,
     }
 )
 
@@ -1777,7 +1778,11 @@ class MinimalMetalObservabilityBackend:
                 clock_domain=self._lifecycle_clock_domain,
             )
             asym_apc_config_payload = asym_apc_config.describe()
-            required_lengths = tuple(sorted(set(self._program_prefix_tokens.values())))
+            # Config is token counts; APCLatencyCurve keys are block counts.
+            # _program_prefix_sizes already validates block alignment.
+            required_lengths = tuple(
+                sorted({tokens // _BLOCK_SIZE for tokens in self._program_prefix_tokens.values()})
+            )
             if required_lengths:
                 from kvopt.costaware.asym_apc_runner import load_calibration_profile
 
