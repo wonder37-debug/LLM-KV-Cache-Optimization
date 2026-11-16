@@ -1,0 +1,16 @@
+{
+ "ablation": "Four-arm ablation on the reference workload, 8 capacities.",
+ "decay-current": "Decay sweep, incumbent constants alpha=60 beta=12 knee=60.",
+ "decay-medium": "Decay sweep, alpha=240 beta=60 knee=120.",
+ "decay-slow": "Decay sweep, alpha=600 beta=180 knee=300 (selected on exploratory seeds).",
+ "exploratory2": "Eight workload families x two capacity fractions, exploratory seed, four arms.",
+ "heldout": "Eight workload families x two capacity fractions x three held-out seeds, four arms.",
+ "heldout-slow": "Tuned decay constants (600/180/300) re-checked on held-out seeds.",
+ "overhead-capacity-delta": "Decision cost of the delta-priced search over the same 12-capacity sweep. Decisions are identical to overhead-capacity-full; only the measured CPU cost differs.",
+ "overhead-capacity-full": "Decision cost of the full re-sum search over the 12-capacity sweep, seed 20260101. Same matrix as the capacity sweep in 'repro'; produced in the same session as overhead-capacity-delta so the two are comparable.",
+ "overhead-families-delta": "Decision cost of the delta-priced search on the same family matrix. Decisions are identical to overhead-families-full.",
+ "overhead-families-full": "Decision cost of the full re-sum search across all eight workload families at 0.85 and 0.95 of each family's working set, seed 20260301.",
+ "overhead-p1": "Quiet-host overhead ladder, pass 1.",
+ "overhead-p2": "Quiet-host overhead ladder, pass 2 (determinism + variance check).",
+ "repro": "Reference reproduction of the corrected CI replay, 12 capacities."
+}

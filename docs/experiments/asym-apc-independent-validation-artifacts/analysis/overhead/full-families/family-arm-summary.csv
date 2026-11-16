@@ -1,0 +1,17 @@
+family,arm,cells,mean_recomputed_tokens,mean_delta_vs_a0,mean_rel_change_vs_a0,cells_better,cells_equal,cells_worse,mean_overhead_ns_p50
+agent_random_arrival,a0,2,6720.0,,,0,0,0,
+agent_random_arrival,asym_apc,2,6624.0,-96.0,-0.017442,1,1,0,5341487.2
+legacy_round_robin,a0,2,15232.0,,,0,0,0,
+legacy_round_robin,asym_apc,2,11848.0,-3384.0,-0.230903,2,0,0,8683542.2
+mixed_lengths,a0,2,8736.0,,,0,0,0,
+mixed_lengths,asym_apc,2,8640.0,-96.0,-0.010417,1,1,0,7823746.8
+program_turn_scaling,a0,2,8000.0,,,0,0,0,
+program_turn_scaling,asym_apc,2,8000.0,0.0,0.0,0,2,0,7857481.0
+shared_prefix_ratio,a0,2,9984.0,,,0,0,0,
+shared_prefix_ratio,asym_apc,2,7992.0,-1992.0,-0.203618,2,0,0,2788304.2
+tool_gap_mix,a0,2,15232.0,,,0,0,0,
+tool_gap_mix,asym_apc,2,11768.0,-3464.0,-0.235863,2,0,0,14381260.5
+unpredictable_revisit,a0,2,5584.0,,,0,0,0,
+unpredictable_revisit,asym_apc,2,5264.0,-320.0,-0.058824,1,1,0,7290457.8
+zipf_revisit,a0,2,5632.0,,,0,0,0,
+zipf_revisit,asym_apc,2,5496.0,-136.0,-0.022849,1,1,0,12424190.2

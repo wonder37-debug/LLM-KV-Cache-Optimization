@@ -1,0 +1,133 @@
+{
+  "calibration": {
+    "measurement_source": "cpu_device_measured",
+    "profile_path": "/workspace/repo-git/docs/experiments/asym-apc-native-evaluation-artifacts/calibration/cpu-device-prefill-v1.json",
+    "profile_sha256": "6266f3fe1a923dd14b0b05811c0978e564f52f566927bd7942486bf29c364e78"
+  },
+  "cells": [
+    {
+      "a0_tokens": 20032,
+      "capacity": 128,
+      "capacity_fraction": null,
+      "cell": "legacy_round_robin-cap128-s20260101",
+      "comparisons": {
+        "asym_apc": {
+          "hit_rate_delta": 0.0,
+          "recomputed_token_delta": 0,
+          "recomputed_token_relative_change": 0.0
+        },
+        "depth_only": {
+          "hit_rate_delta": 0.03437499999999999,
+          "recomputed_token_delta": -880,
+          "recomputed_token_relative_change": -0.0439297124600639
+        }
+      },
+      "family": "legacy_round_robin",
+      "geometry_signature": "917615474e770c32",
+      "seed": 20260101,
+      "working_set_blocks": 292
+    },
+    {
+      "a0_tokens": 18752,
+      "capacity": 192,
+      "capacity_fraction": null,
+      "cell": "legacy_round_robin-cap192-s20260101",
+      "comparisons": {
+        "asym_apc": {
+          "hit_rate_delta": 0.017187499999999994,
+          "recomputed_token_delta": -352,
+          "recomputed_token_relative_change": -0.01877133105802048
+        },
+        "depth_only": {
+          "hit_rate_delta": 0.021562500000000012,
+          "recomputed_token_delta": -464,
+          "recomputed_token_relative_change": -0.024744027303754267
+        }
+      },
+      "family": "legacy_round_robin",
+      "geometry_signature": "917615474e770c32",
+      "seed": 20260101,
+      "working_set_blocks": 292
+    },
+    {
+      "a0_tokens": 15680,
+      "capacity": 256,
+      "capacity_fraction": null,
+      "cell": "legacy_round_robin-cap256-s20260101",
+      "comparisons": {
+        "asym_apc": {
+          "hit_rate_delta": 0.06,
+          "recomputed_token_delta": -1536,
+          "recomputed_token_relative_change": -0.09795918367346938
+        },
+        "depth_only": {
+          "hit_rate_delta": 0.19,
+          "recomputed_token_delta": -4864,
+          "recomputed_token_relative_change": -0.31020408163265306
+        }
+      },
+      "family": "legacy_round_robin",
+      "geometry_signature": "917615474e770c32",
+      "seed": 20260101,
+      "working_set_blocks": 292
+    },
+    {
+      "a0_tokens": 13888,
+      "capacity": 288,
+      "capacity_fraction": null,
+      "cell": "legacy_round_robin-cap288-s20260101",
+      "comparisons": {
+        "asym_apc": {
+          "hit_rate_delta": 0.31,
+          "recomputed_token_delta": -7936,
+          "recomputed_token_relative_change": -0.5714285714285714
+        },
+        "depth_only": {
+          "hit_rate_delta": 0.31,
+          "recomputed_token_delta": -7936,
+          "recomputed_token_relative_change": -0.5714285714285714
+        }
+      },
+      "family": "legacy_round_robin",
+      "geometry_signature": "917615474e770c32",
+      "seed": 20260101,
+      "working_set_blocks": 292
+    }
+  ],
+  "engine": {
+    "block_hash_function": "sha256_cbor",
+    "cuda_available": false,
+    "python": "3.11.1",
+    "pythonhashseed": "0",
+    "torch_version": "2.10.0+cu128",
+    "vllm_version": "0.27.1"
+  },
+  "generated_at_utc": "2026-11-16T03:44:13Z",
+  "matrix": {
+    "arms": [
+      "a0",
+      "depth_only",
+      "asym_apc"
+    ],
+    "capacities": [
+      128,
+      192,
+      256,
+      288
+    ],
+    "decay": {
+      "alpha_seconds": 60.0,
+      "beta_seconds": 12.0,
+      "knee_seconds": 60.0
+    },
+    "families": [
+      "legacy_round_robin"
+    ],
+    "label": "overhead-pass1",
+    "seeds": [
+      20260101
+    ],
+    "ttl_seconds": 30.0
+  },
+  "schema": "kvopt.asym_apc.real_blockpool_campaign.v1"
+}

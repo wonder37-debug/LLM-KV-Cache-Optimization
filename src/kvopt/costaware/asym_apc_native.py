@@ -27,6 +27,19 @@ def _finite_nonnegative(value: float, name: str) -> float:
     return val
 
 
+# Ablation surface. ``contiguous_prefix`` prices the *cascade* a victim set
+# causes (evicting block d truncates the chain at d-1). ``independent_block``
+# prices each victim on its own marginal depth cost and is position-insensitive,
+# which is the honest counterfactual for "does the contiguous structure matter".
+_COST_MODELS = frozenset({"contiguous_prefix", "independent_block"})
+_WEIGHTINGS = frozenset({"two_timescale", "uniform"})
+# How the search prices a candidate set. ``full`` re-sums the whole loss for
+# every candidate (the original implementation, kept for measurement);
+# ``incremental`` prices the delta from the current selection. Both rank by the
+# same function; only the arithmetic path differs.
+_LOSS_EVALUATIONS = frozenset({"full", "incremental"})
+
+
 @dataclass(frozen=True, slots=True)
 class APCLatencyCurve:
     """Measured/simulated prefill milliseconds for (total blocks, cached depth).
@@ -74,7 +87,6 @@ class APCLatencyCurve:
 @dataclass(frozen=True, slots=True)
 class AsymDecay:
     """Two-timescale, AsymCache-inspired *ranking proxy*, not calibrated P(reuse)."""
-
     alpha_seconds: float = 60.0
     beta_seconds: float = 12.0
     knee_seconds: float = 60.0
@@ -110,6 +122,114 @@ class AsymAPCAudit:
         return set(self.selected) != set(self.baseline)
 
 
+class _IncrementalPrefixLoss:
+    """Contiguous-prefix loss evaluated as a delta from the current selection.
+
+    The full loss is separable in the deepest surviving block of each chain::
+
+        loss(S) = sum_c w_c * max(0, curve_c(min_{b in S}(depth_b - 1)) - base_c)
+
+    so re-pricing a candidate only touches the chains that candidate is a member
+    of, not every chain the decision involves. That is the difference between
+    O(candidates * chains) and O(candidates) per decision, and it is the only
+    thing this class changes: the reported baseline/proposed losses are still
+    produced by the original full sum, and the *ranking* is mathematically the
+    same function of the same inputs.
+
+    ``plan(ids)`` is pure; ``commit(state)`` advances the selection.
+    """
+
+    __slots__ = ("_base", "_contrib", "_curves", "_cut", "_resident", "_weights")
+
+    def __init__(
+        self,
+        curves: Mapping[str, APCLatencyCurve],
+        weights: Mapping[str, float],
+        base_cost: Mapping[str, float],
+        resident: Mapping[str, int],
+    ) -> None:
+        self._curves = curves
+        self._weights = weights
+        self._base = base_cost
+        self._resident: dict[str, int] = dict(resident)
+        self._cut: dict[str, int] = {}
+        self._contrib: dict[str, float] = {}
+        self.reset()
+
+    def reset(self) -> None:
+        """Return to the empty selection, i.e. every chain fully resident."""
+        for chain, length in self._resident.items():
+            self._cut[chain] = length
+            self._contrib[chain] = self._price(chain, length)
+
+    def _price(self, chain: str, cut: int) -> float:
+        return self._weights[chain] * max(0.0, self._curves[chain].at(cut) - self._base[chain])
+
+    def plan(self, ids: Sequence[int], memberships: Mapping[int, tuple[tuple[str, int], ...]]
+             ) -> tuple[dict[str, int], float]:
+        best: dict[str, int] = {}
+        for block_id in ids:
+            for chain, depth in memberships[block_id]:
+                candidate = depth - 1
+                current = best.get(chain)
+                if current is None or candidate < current:
+                    best[chain] = candidate
+        delta = 0.0
+        for chain, candidate in best.items():
+            if candidate < self._cut[chain]:
+                delta += self._price(chain, candidate) - self._contrib[chain]
+        return best, delta
+
+    def commit(self, state: Mapping[str, int]) -> None:
+        for chain, candidate in state.items():
+            if candidate < self._cut[chain]:
+                self._cut[chain] = candidate
+                self._contrib[chain] = self._price(chain, candidate)
+
+    def total(self) -> float:
+        """Loss of the committed selection. Diagnostics, not ranking."""
+        return sum(self._contrib.values())
+
+
+class _IndependentBlockLoss:
+    """Marginal-only loss: each victim is priced alone, so the delta is additive.
+
+    This model's loss is a long sum over memberships, and a long sum is where
+    floating-point order starts to matter: two victim sets that tie in exact
+    arithmetic can fall either way once the terms are added in a different
+    order. The evaluator therefore reproduces the *addition sequence* of the full
+    sum (running total, then the candidate's terms left to right) instead of
+    adding a pre-summed delta to it, so the ranking is bit-identical rather than
+    merely mathematically equal.
+    """
+
+    __slots__ = ("_curves", "_weights", "_running")
+
+    def __init__(self, curves: Mapping[str, APCLatencyCurve],
+                 weights: Mapping[str, float]) -> None:
+        self._curves = curves
+        self._weights = weights
+        self._running = 0.0
+
+    def reset(self) -> None:
+        self._running = 0.0
+
+    def plan(self, ids: Sequence[int], memberships: Mapping[int, tuple[tuple[str, int], ...]]
+             ) -> tuple[float, float]:
+        total = self._running
+        for block_id in ids:
+            for chain, depth in memberships[block_id]:
+                curve = self._curves[chain]
+                total += self._weights[chain] * max(
+                    0.0, curve.at(depth - 1) - curve.at(depth)
+                )
+        return total, total
+
+    def commit(self, state: float | None) -> None:
+        if state is not None:
+            self._running = state
+
+
 class AsymAPCNativeCoordinator:
     """A0-compatible coordinator; inject into RetentionRuntimeIntegration.
 
@@ -133,6 +253,9 @@ class AsymAPCNativeCoordinator:
         max_greedy_operations: int = 50000,
         min_proxy_gain_ms: float = 1e-9,
         clock_domain: str = "system_monotonic",
+        cost_model: str = "contiguous_prefix",
+        weighting: str = "two_timescale",
+        loss_evaluation: str = "incremental",
     ) -> None:
         if not callable(getattr(registry, "build_request", None)):
             raise TypeError("registry needs A2NativeSnapshotRegistry.build_request")
@@ -140,6 +263,12 @@ class AsymAPCNativeCoordinator:
             raise ValueError("tau_seconds must be positive")
         if max_exact_subsets < 1 or max_greedy_operations < 1:
             raise ValueError("search limits must be positive")
+        if cost_model not in _COST_MODELS:
+            raise ValueError(f"cost_model must be one of {sorted(_COST_MODELS)}")
+        if weighting not in _WEIGHTINGS:
+            raise ValueError(f"weighting must be one of {sorted(_WEIGHTINGS)}")
+        if loss_evaluation not in _LOSS_EVALUATIONS:
+            raise ValueError(f"loss_evaluation must be one of {sorted(_LOSS_EVALUATIONS)}")
         self._registry = registry
         self._curves = dict(curves_by_length)
         for length, curve in self._curves.items():
@@ -153,8 +282,26 @@ class AsymAPCNativeCoordinator:
         if not isinstance(clock_domain, str) or not clock_domain:
             raise ValueError("clock_domain must be nonempty")
         self._clock_domain = clock_domain
+        self._cost_model = cost_model
+        self._weighting = weighting
+        self._loss_evaluation = loss_evaluation
         self._last_access: dict[str, float] = {}
         self.last_audit: AsymAPCAudit | None = None
+
+    @property
+    def loss_evaluation(self) -> str:
+        """How the search prices candidate sets: full re-sum or delta."""
+        return self._loss_evaluation
+
+    @property
+    def cost_model(self) -> str:
+        """Scoring variant: contiguous-prefix cascade or independent marginals."""
+        return self._cost_model
+
+    @property
+    def weighting(self) -> str:
+        """Recency weighting variant: two-timescale decay or uniform."""
+        return self._weighting
 
     @property
     def clock_domain(self) -> str:
@@ -321,15 +468,24 @@ class AsymAPCNativeCoordinator:
                         reason = "chain_length_mismatch"
                         break
                     when = access.get(m.chain)
-                    if when is None:
-                        when = self._observed_access_time(m.chain)
+                    if self._weighting != "uniform":
+                        # Only the recency-weighted variants consume time. The
+                        # uniform ablation must not be penalised for evidence it
+                        # does not use, or its coverage would differ for an
+                        # unrelated reason.
                         if when is None:
-                            reason = "recency_missing"
-                            break
-                        if when > timestamp:
-                            reason = "future_observation"
-                            break
-                        access[m.chain] = when
+                            when = self._observed_access_time(m.chain)
+                            if when is None:
+                                reason = "recency_missing"
+                                break
+                            if when > timestamp:
+                                reason = "future_observation"
+                                break
+                            access[m.chain] = when
+                    elif when is None:
+                        observed = self._observed_access_time(m.chain)
+                        if observed is not None and observed <= timestamp:
+                            access[m.chain] = observed
                     candidate_members.append((m.chain, m.depth))
             if reason is not None:
                 invalid[bid] = reason
@@ -359,9 +515,23 @@ class AsymAPCNativeCoordinator:
         # unrelated blocks elsewhere in the queue have no logical-chain proof.
         involved = {chain for bid in verified for chain, _ in memberships[bid]}
         base_cost = {c: curves[c].at(lengths[c]) for c in involved}
-        weights = {c: self._decay.weight(timestamp - access[c]) for c in involved}
+        if self._weighting == "uniform":
+            weights = {c: 1.0 for c in involved}
+        else:
+            weights = {c: self._decay.weight(timestamp - access[c]) for c in involved}
 
         def loss(ids: Sequence[int]) -> float:
+            if self._cost_model == "independent_block":
+                # Each victim is priced alone: the marginal prefill cost of
+                # losing that depth, with no credit for the suffix it truncates.
+                total = 0.0
+                for block_id in ids:
+                    for chain, depth in memberships[block_id]:
+                        curve = curves[chain]
+                        total += weights[chain] * max(
+                            0.0, curve.at(depth - 1) - curve.at(depth)
+                        )
+                return total
             prefixes = {c: lengths[c] for c in involved}
             for block_id in ids:
                 for chain, depth in memberships[block_id]:
@@ -371,6 +541,22 @@ class AsymAPCNativeCoordinator:
 
         selected: list[int] = []
         exact_only = True
+        tracker: _IncrementalPrefixLoss | _IndependentBlockLoss | None = None
+        if self._loss_evaluation == "incremental":
+            if self._cost_model == "independent_block":
+                tracker = _IndependentBlockLoss(curves, weights)
+            else:
+                tracker = _IncrementalPrefixLoss(
+                    curves, weights, base_cost, {c: lengths[c] for c in involved}
+                )
+
+        def resync() -> None:
+            """Re-anchor the delta evaluator on the current ``selected``."""
+            if tracker is None:
+                return
+            tracker.reset()
+            tracker.commit(tracker.plan(tuple(selected), memberships)[0])
+
         for tier in (0, 1):
             # The number required at each tier is fixed by A0's eligibility
             # plan; unknown blocks never consume or receive a new victim slot.
@@ -384,21 +570,42 @@ class AsymAPCNativeCoordinator:
                               missing=missing)
             if take == len(members):
                 selected.extend(members)
+                resync()
                 continue
             if math.comb(len(members), take) <= self._max_exact:
                 options = itertools.combinations(members, take)
-                chosen = min(options,
-                             key=lambda choice: (loss((*selected, *choice)),
-                                                 tuple(by_id[v].lru_rank for v in choice)))
+                if tracker is None:
+                    chosen = min(options,
+                                 key=lambda choice: (loss((*selected, *choice)),
+                                                     tuple(by_id[v].lru_rank for v in choice)))
+                else:
+                    # loss(selected + choice) - loss(selected) is a constant
+                    # shift of the full loss, so the argmin is the same one.
+                    chosen = min(options,
+                                 key=lambda choice: (tracker.plan(choice, memberships)[1],
+                                                     tuple(by_id[v].lru_rank for v in choice)))
                 selected.extend(chosen)
+                resync()
             else:
                 exact_only = False
                 if len(members) * take > self._max_ops:
                     return finish("search_budget_exceeded", ranked=len(verified), missing=missing)
                 remaining = set(members)
                 for _ in range(take):
-                    pick = min(remaining,
-                               key=lambda bid: (loss((*selected, bid)), by_id[bid].lru_rank))
+                    if tracker is None:
+                        pick = min(remaining,
+                                   key=lambda bid: (loss((*selected, bid)), by_id[bid].lru_rank))
+                        state = None
+                    else:
+                        pick = -1
+                        state = None
+                        best_key: tuple[float, int] | None = None
+                        for bid in remaining:
+                            planned, delta = tracker.plan((bid,), memberships)
+                            key = (delta, by_id[bid].lru_rank)
+                            if best_key is None or key < best_key:
+                                pick, best_key, state = bid, key, planned
+                        tracker.commit(state)
                     selected.append(pick)
                     remaining.remove(pick)
         proposed = tuple(selected)
