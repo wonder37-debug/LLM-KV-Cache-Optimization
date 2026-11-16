@@ -87,10 +87,20 @@ jobs:
           import json, pathlib
           for f in sorted(pathlib.Path('cpu-blockpool-results').glob('cap*/summary.json')):
               data=json.loads(f.read_text())
-              a=data['summaries']['a0']['total_recomputed_tokens']
-              b=data['summaries']['asym_apc']['total_recomputed_tokens']
+              a0=data['summaries']['a0']
+              asym=data['summaries']['asym_apc']
+              a=a0['total_recomputed_tokens']
+              b=asym['total_recomputed_tokens']
               print(f.parent.name, 'A0', a, 'ASYM_APC', b, 'delta', b-a,
+                    'A0_retention_events',a0['pressure_events_with_retention_entries'],
+                    'Asym_retention_events',asym['pressure_events_with_retention_entries'],
+                    'A0_protected_events',a0['pressure_events_with_protected_entries'],
+                    'Asym_protected_events',asym['pressure_events_with_protected_entries'],
                     'GPU',data['scope']['gpu_executed'])
+              assert a0['pressure_events_with_retention_entries'] > 0
+              assert asym['pressure_events_with_retention_entries'] > 0
+              assert a0['pressure_events_with_protected_entries'] > 0
+              assert asym['pressure_events_with_protected_entries'] > 0
               assert data['scope']['gpu_executed'] is False
           PY
       - uses: actions/upload-artifact@v4
