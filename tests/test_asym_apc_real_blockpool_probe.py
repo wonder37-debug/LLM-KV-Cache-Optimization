@@ -152,3 +152,108 @@ def test_gpu_calibration_fully_cached_sample_is_unchanged() -> None:
     assert gpu_calibrate.tokens_for_repetition(
         base, cached_blocks=4, block_size=16, repetition=7, vocabulary_size=1000
     ) == base
+
+
+def test_a0_and_asym_apc_both_register_the_same_retention_entry(monkeypatch, tmp_path) -> None:
+    """A0 must not silently run with an empty RetentionManager."""
+    from types import SimpleNamespace
+    from kvopt.continuum.retention import RetentionManager
+    from kvopt.costaware import asym_apc_runner
+
+    class FakeSubstrate:
+        def __init__(self, num_blocks):
+            self.blocks = {
+                i: SimpleNamespace(block_id=i, ref_cnt=0, block_hash=None)
+                for i in range(1, num_blocks + 1)
+            }
+            self.queue = list(self.blocks)
+
+        def request(self, _request_id, _token_ids):
+            return SimpleNamespace(block_hashes=[b"requested"])
+
+        def lookup_chain(self, _hashes):
+            return []
+
+        def touch(self, _ids):
+            return None
+
+        def num_free(self):
+            return len(self.queue)
+
+        def free_queue_ids(self):
+            return list(self.queue)
+
+        def free_queue_blocks(self):
+            return [self.blocks[i] for i in self.queue]
+
+        def hash_of(self, block_id):
+            return self.blocks[block_id].block_hash
+
+        def take_specific(self, ids):
+            for bid in ids:
+                self.queue.remove(bid)
+                self.blocks[bid].ref_cnt += 1
+            return list(ids)
+
+        def allocate(self, count):
+            return self.take_specific(self.queue[:count])
+
+        def cache(self, _request, ids, _cached):
+            for bid in ids:
+                self.blocks[bid].block_hash = f"block:{bid}".encode()
+
+        def release(self, ids):
+            for bid in ids:
+                self.blocks[bid].ref_cnt = 0
+                self.queue.append(bid)
+
+    class FakeAsymCoordinator:
+        def __init__(self):
+            self.coordinator = self
+
+        def select_victims(self, _candidates, preparation, _entries, *, required_blocks, timestamp):
+            return tuple(b.block_id for b in preparation.virtual_eligible_order[:required_blocks])
+
+        def pop_pending_decision(self):
+            return None
+
+        def observe_chain_access(self, chain_id, timestamp):
+            return None
+
+    profile = SimpleNamespace(curves_by_length={})
+    monkeypatch.setattr(probe, "VLLMSubstrate", FakeSubstrate)
+    monkeypatch.setattr(asym_apc_runner, "load_calibration_profile", lambda *args, **kwargs: profile)
+    monkeypatch.setattr(asym_apc_runner, "parse_policy_config", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        asym_apc_runner, "build_asym_apc_arm",
+        lambda **kwargs: (FakeAsymCoordinator(), profile, None),
+    )
+    original_upsert = RetentionManager.upsert
+    observed = []
+
+    def spy_upsert(self, snapshot):
+        observed.append(snapshot)
+        return original_upsert(self, snapshot)
+
+    monkeypatch.setattr(RetentionManager, "upsert", spy_upsert)
+
+    turns = [probe.Turn(
+        sequence_index=0, program="p", prefix_key="p:0",
+        token_ids=tuple(range(16)), arrival_gap_seconds=1.0,
+    )]
+    captured = {}
+    for arm in ("a0", "asym_apc"):
+        observed.clear()
+        result = probe.run_arm(
+            arm, turns, num_blocks=8, ttl_seconds=30.0,
+            profile_path=tmp_path / "mock.json", profile_sha="test",
+            allowed_sources=("native_gpu",), proxy_gain_ms=0.0,
+        )
+        assert result.requests[0]["status"] == "OK"
+        assert observed, f"{arm} failed to register an observed Retention Entry"
+        captured[arm] = tuple(
+            (entry.protected, tuple(b.block_id for b in entry.block_ids),
+             entry.deadline_timestamp)
+            for entry in observed
+        )
+    assert captured["a0"] == captured["asym_apc"]
