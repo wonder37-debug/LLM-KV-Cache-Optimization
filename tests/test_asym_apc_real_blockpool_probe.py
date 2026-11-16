@@ -30,6 +30,7 @@ def _load(name: str):
 
 probe = _load("real_blockpool_eval")
 calibrate = _load("calibrate_cpu_device")
+gpu_calibrate = _load("calibrate")
 
 
 def _workload(**overrides) -> list:
@@ -120,3 +121,34 @@ def test_fully_cached_point_costs_zero() -> None:
     payload = _point(640, 640, 0.0).payload()
     assert payload["computed_tokens"] == 0
     assert payload["prefill_ms"] == 0.0
+
+
+def test_gpu_calibration_repetitions_preserve_only_the_requested_prefix() -> None:
+    base = list(range(400, 464))
+    x = gpu_calibrate.tokens_for_repetition(
+        base, cached_blocks=2, block_size=16, repetition=0, vocabulary_size=1000
+    )
+    y = gpu_calibrate.tokens_for_repetition(
+        base, cached_blocks=2, block_size=16, repetition=1, vocabulary_size=1000
+    )
+    assert x[:32] == y[:32] == base[:32]
+    assert x[32] != y[32] != base[32]
+    assert x[33:] == y[33:] == base[33:]
+
+
+def test_gpu_calibration_cold_samples_never_hit_the_same_first_block() -> None:
+    base = list(range(400, 464))
+    samples = [
+        gpu_calibrate.tokens_for_repetition(
+            base, cached_blocks=0, block_size=16, repetition=rep, vocabulary_size=1000
+        )
+        for rep in range(10)
+    ]
+    assert len({sample[0] for sample in samples}) == 10
+
+
+def test_gpu_calibration_fully_cached_sample_is_unchanged() -> None:
+    base = list(range(400, 464))
+    assert gpu_calibrate.tokens_for_repetition(
+        base, cached_blocks=4, block_size=16, repetition=7, vocabulary_size=1000
+    ) == base
