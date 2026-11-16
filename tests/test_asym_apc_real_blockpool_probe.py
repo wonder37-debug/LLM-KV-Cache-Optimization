@@ -237,10 +237,13 @@ def test_a0_and_asym_apc_both_register_the_same_retention_entry(monkeypatch, tmp
 
     monkeypatch.setattr(RetentionManager, "upsert", spy_upsert)
 
-    turns = [probe.Turn(
-        sequence_index=0, program="p", prefix_key="p:0",
-        token_ids=tuple(range(16)), arrival_gap_seconds=1.0,
-    )]
+    turns = [
+        probe.Turn(
+            sequence_index=index, program="p", prefix_key=f"p:{index}",
+            token_ids=tuple(range(16)), arrival_gap_seconds=1.0,
+        )
+        for index in range(2)
+    ]
     captured = {}
     for arm in ("a0", "asym_apc"):
         observed.clear()
@@ -251,6 +254,8 @@ def test_a0_and_asym_apc_both_register_the_same_retention_entry(monkeypatch, tmp
         )
         assert result.requests[0]["status"] == "OK"
         assert observed, f"{arm} failed to register an observed Retention Entry"
+        assert result.pressure_retention_entries == [0, 1]
+        assert result.pressure_protected_entries == [0, 1]
         captured[arm] = tuple(
             (entry.protected, tuple(b.block_id for b in entry.block_ids),
              entry.deadline_timestamp)
