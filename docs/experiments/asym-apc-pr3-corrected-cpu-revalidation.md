@@ -4,13 +4,15 @@
 
 **Baseline:** PR #3 original commit `d91d238b630d4a0dd217a5efc71b7eafd0053fec` (backed up as `backup/asym-apc-pr3-before-validity-fix`).
 
-**Proof:** [GitHub Actions pinned-CPU-wheel A/B/C replay #43794567374](https://github.com/wonder37-debug/LLM-KV-Cache-Optimization/actions/runs/43794567374) and [raw JSONL, summaries, and logs](https://github.com/wonder37-debug/LLM-KV-Cache-Optimization/actions/runs/43794567374/artifacts/14193542224). The live CPU replay used the official vLLM v0.27.1 CPU wheel on Ubuntu 24.04 and torch 2.13.0+cpu. Both jobs returned success. The self-contained repository test suite reported **2022 passed, 19 skipped, 2 explicitly deselected**. The two deselected tests require the absent historical W1-C `acquisition-sidecar.json`.
+**Proof:** [GitHub Actions pinned-CPU-wheel A/B/C replay #43795237120](https://github.com/wonder37-debug/LLM-KV-Cache-Optimization/actions/runs/43795237120) and [raw JSONL, summaries, and logs](https://github.com/wonder37-debug/LLM-KV-Cache-Optimization/actions/runs/43795237120/artifacts/14193692618). The live CPU replay used the official vLLM v0.27.1 CPU wheel on Ubuntu 24.04 and torch 2.13.0+cpu. Both jobs returned success. The self-contained repository test suite reported **2022 passed, 19 skipped, 2 explicitly deselected**. The two deselected tests require the absent historical W1-C `acquisition-sidecar.json`.
 
 ## 1. Why the original PR #3 raw results are historical, not a valid final causal comparison
 
 The original `real_blockpool_eval.py` constructed an A2 observation registry and called `RetentionManager.upsert` only for `asym_apc`. The `a0` arm had **no populated Retention Entry state**. The original report's assertion that A0 and AsymAPC differed only by Block selector was consequently false. Retain all original artifacts as prior evidence, but do **not** use their percentages as independently validated algorithm gains.
 
 The corrected probe instantiates `A2NativeSnapshotRegistry` in both controlled arms, observes Native chains in both, synchronizes actual residency and TTL-protection state in both, and feeds the identical `RetentionRuntimeIntegration` contract to both. A new CPU test checks that a second pressure event sees the same nonzero, protected Entry in both arms. The code also audits retention and protected-entry counts per pressure decision in actual CPU probe summaries.
+
+The corrected real BlockPool replay also records actual Continuum state at each pressure event. At capacity 288, **both arms** observe **39/40** pressure events with Retention Entries, and **23/40** events with protected Entries. At capacity 296, both observe **23/24** with Entries and **15/24** with protected Entries. These paired counts provide direct evidence the original empty-A0-table defect has been removed. Equal counts do not alone establish identical histories after policy decisions diverge; the controlled lifecycle code and CPU parity test provide the remainder of that check.
 
 The corrected probe uses `time.perf_counter` for decision CPU time instead of synthetic `ManualClock`, and configures the intended `AsymDecay(alpha_seconds=60, beta_seconds=12, knee_seconds=60)` rather than an accidentally single-exponential setting. These are substantive changes, so the new and old measurements must not be pooled as identical-policy replications.
 
