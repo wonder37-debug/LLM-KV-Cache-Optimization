@@ -196,28 +196,63 @@ def _request_spans(run: RunEvidence) -> list[float]:
 
 def run_metrics(run: RunEvidence) -> dict[str, object]:
     """Derive decision-level and runtime metrics for one run."""
-    snapshots = run.of_type("VLLM_PREFIX_SNAPSHOT")
-    reusable: list[int] = []
-    recomputed_total: int | None = 0 if run.prompt_tokens_by_request else None
-    recomputed_reason: str | None = (
-        None
-        if run.prompt_tokens_by_request
-        else f"prompt_token_count_unavailable:{run.prompt_token_source}"
-    )
-    for event in snapshots:
-        payload = event.get("payload") or {}
-        reused = payload.get("reusable_token_count")
-        if not isinstance(reused, int):
-            continue
-        reusable.append(int(reused))
+    # Post-turn VLLM_PREFIX_SNAPSHOT describes the cache AFTER the request
+    # has populated it. It is NOT evidence of the prefix hit during prefill.
+    snapshots = run.of_type("VLLM_PREFIX_SNAPSHOT")  # diagnostic count only
+    native_observations = run.of_type("VLLM_NATIVE_REQUEST_OBSERVATION")
+    expected_ids = set(run.prompt_tokens_by_request)
+    if not expected_ids:
+        expected_ids = {
+            request_id
+            for event in run.of_type("REQUEST_ARRIVED")
+            for request_id in [_request_id(event)]
+            if request_id is not None
+            and isinstance(event.get("payload"), Mapping)
+            and event["payload"].get("kind") == "turn"
+        }
+    by_request: dict[str, list[Mapping[str, Any]]] = {}
+    for event in native_observations:
         request_id = _request_id(event)
-        if recomputed_total is not None:
-            total = run.prompt_tokens_by_request.get(str(request_id))
-            if total is None:
-                recomputed_total = None
-                recomputed_reason = "prompt_token_count_missing_for_request"
-            else:
-                recomputed_total += max(0, total - reused)
+        if request_id in expected_ids:
+            by_request.setdefault(request_id, []).append(event)
+
+    reused_by_request: dict[str, int] = {}
+    prompt_by_request: dict[str, int] = {}
+    missing_reasons: list[str] = []
+    if not expected_ids:
+        missing_reasons.append("turn_request_ids_unavailable")
+    for request_id in sorted(expected_ids):
+        matches = by_request.get(request_id, [])
+        if len(matches) != 1:
+            missing_reasons.append(f"request_observation_count:{request_id}:{len(matches)}")
+            continue
+        payload = matches[0].get("payload") or {}
+        prompt = payload.get("native_prompt_tokens")
+        cached = payload.get("native_cached_prefix_tokens")
+        if (not isinstance(prompt, int) or isinstance(prompt, bool)
+            or not isinstance(cached, int) or isinstance(cached, bool)
+            or prompt < 0 or cached < 0 or cached > prompt):
+            missing_reasons.append(f"invalid_native_prompt_or_cache_count:{request_id}")
+            continue
+        # Prefer the Native request-time prompt length over the design's segment
+        # sum: the Phase 2C generator may append one request-specific token.
+        prompt_by_request[request_id] = prompt
+        reused_by_request[request_id] = cached
+
+    evidence_complete = not missing_reasons and len(reused_by_request) == len(expected_ids)
+    reusable = list(reused_by_request.values()) if evidence_complete else []
+    recomputed_total: int | None = (
+        sum(prompt_by_request[k] - reused_by_request[k] for k in expected_ids)
+        if evidence_complete else None
+    )
+    recomputed_reason: str | None = (
+        None if evidence_complete
+        else "native_request_time_cache_evidence_incomplete:" + ";".join(missing_reasons)
+    )
+    total_prompt: int | None = (
+        sum(prompt_by_request.values()) if evidence_complete else None
+    )
+    total_reused = sum(reusable) if evidence_complete else 0
 
     decisions = run.of_type("ASYM_APC_BLOCK_DECISION")
     reasons = Counter(
@@ -275,10 +310,6 @@ def run_metrics(run: RunEvidence) -> dict[str, object]:
 
     service_seconds = _request_spans(run)
     completions = run.of_type("VLLM_REQUEST_COMPLETED")
-    total_reused = sum(reusable)
-    total_prompt = (
-        sum(run.prompt_tokens_by_request.values()) if run.prompt_tokens_by_request else None
-    )
     return {
         "run_id": run.run_id,
         "arm": run.arm,
@@ -289,6 +320,10 @@ def run_metrics(run: RunEvidence) -> dict[str, object]:
         "execution_status": run.execution_status,
         "request_count": len(completions),
         "prefix_snapshot_count": len(snapshots),
+        "native_request_observation_count": len(native_observations),
+        "native_request_observation_coverage": (
+            len(reused_by_request) / len(expected_ids) if expected_ids else None
+        ),
         "mean_reusable_prefix_tokens": (
             float(sum(reusable) / len(reusable)) if reusable else None
         ),
@@ -298,7 +333,7 @@ def run_metrics(run: RunEvidence) -> dict[str, object]:
             else None
         ),
         "prefix_hit_rate_reason": (
-            None if total_prompt else f"prompt_token_count_unavailable:{run.prompt_token_source}"
+            None if total_prompt else recomputed_reason
         ),
         "recomputed_prefill_tokens": recomputed_total,
         "recomputed_prefill_tokens_reason": recomputed_reason,
