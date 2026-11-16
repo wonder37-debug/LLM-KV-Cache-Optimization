@@ -213,8 +213,15 @@ curve, is what limits the selector in the extreme-pressure regime.
   preemption or real concurrency. Concurrency changes what sits at the queue head and could
   change both evidence coverage and the gain.
 * **Determinism, not statistics.** Seeds change tokens but not block geometry, so repeated
-  seeds are bit-identical; `sd = 0` here is *not* evidence of stability. The capacity sweep is
-  the only genuine replication axis, and each capacity is a single deterministic run.
+  seeds are bit-identical; `sd = 0` here is *not* evidence of stability. The committed
+  `replication` set makes this explicit: 240 and 288 blocks at seeds `20260101/02/03` produce
+  identical recomputed-token counts and identical physical-eviction counts in all six runs.
+  The capacity sweep is the only genuine replication axis, and each capacity is a single
+  deterministic run.
+* **One archived run set is pre-fix.** `raw/blockpool/superseded/grid` was captured before the
+  evidence-coverage fix: its `cap160` point agrees with the final code, `cap256`/`cap320` do
+  not. It is kept for provenance and must not be pooled with `sweep2`/`fine`/`replication`;
+  `raw/MANIFEST.json` marks it `superseded` with the reason.
 * **Model substitution** (0.5B instead of 1.5B) and float32 on CPU.
 * `take_specific` reproduces what `get_new_blocks` does to the blocks it removes; it is not a
   patch of the allocator. A production policy needs the allocator to expose that choice.
@@ -255,8 +262,17 @@ PYTHONHASHSEED=0 python scripts/probes/asym_apc_native/real_blockpool_eval.py \
 
 | Path | Content |
 | --- | --- |
+| [`.../experiment-design.md`](asym-apc-native-evaluation-artifacts/experiment-design.md) | hypotheses, arms, workload, capacity grid, instruments, decision rules, analysis plan, threats, deviations |
+| [`.../results/`](asym-apc-native-evaluation-artifacts/results) | `arm-metrics-by-capacity.csv` (69 rows), `paired-deltas.csv` (23 rows) |
+| [`.../raw/`](asym-apc-native-evaluation-artifacts/raw) | **complete** traces: 31 runs, 462 files, 4.9 MiB, with per-file SHA-256 in `raw/MANIFEST.json`, including every superseded run |
 | [`.../calibration/cpu-device-prefill-v1.json`](asym-apc-native-evaluation-artifacts/calibration/cpu-device-prefill-v1.json) | 32 measured points, provenance, quality report |
 | [`.../calibration/calibration-run.log`](asym-apc-native-evaluation-artifacts/calibration/calibration-run.log) | raw calibration stdout |
 | [`.../vllm-blockpool-eval/cap*/summary.json`](asym-apc-native-evaluation-artifacts/vllm-blockpool-eval) | A/B/C summaries for 15 capacities |
 | [`.../vllm-blockpool-eval/cap288-detail`](asym-apc-native-evaluation-artifacts/vllm-blockpool-eval/cap288-detail) | per-request and per-decision records at the headline capacity |
 | [`.../vllm-blockpool-eval/environment.txt`](asym-apc-native-evaluation-artifacts/vllm-blockpool-eval/environment.txt) | cgroup limits, CPU quota, absence of GPU |
+
+The raw tree separates `raw/blockpool/authoritative/` (`sweep2`, `fine`, `replication` — the
+runs the numbers come from) from `raw/blockpool/superseded/` (28 runs invalidated by a harness
+fix, each annotated with the defect it exposed). Superseded runs are committed on purpose: the
+progression from "AP C ≡ Native LRU" to a measured gain is on record, so a reader can check
+that the headline comes from a corrected harness rather than from a favourable one.

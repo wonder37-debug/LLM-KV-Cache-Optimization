@@ -1,0 +1,12 @@
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:00<00:36,  7.92it/s]Loading weights:  80%|████████  | 232/290 [00:00<00:00, 1225.40it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 1218.86it/s]
+[calibrate] m=  384 r=    0 median= 1214.35ms p90= 1215.01ms spread=0.007
+[calibrate] m=  384 r=  192 median= 1398.15ms p90= 1400.00ms spread=0.005
+[calibrate] m=  384 r=  384 median=    0.00ms p90=    0.00ms spread=0.000
+{
+  "written": "/workspace/realrun/calibration/probe-cal.json",
+  "measurement_source": "cpu_device_measured",
+  "all_monotonic": false,
+  "resolvable": {
+    "24": false
+  }
+}

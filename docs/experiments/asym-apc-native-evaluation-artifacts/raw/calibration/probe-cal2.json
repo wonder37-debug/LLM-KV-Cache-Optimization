@@ -1,0 +1,138 @@
+{
+  "curves": [
+    {
+      "samples": [
+        {
+          "cached_blocks": 0,
+          "prefill_ms": 1210.6683010060806
+        },
+        {
+          "cached_blocks": 6,
+          "prefill_ms": 888.8467239739839
+        },
+        {
+          "cached_blocks": 12,
+          "prefill_ms": 609.2761490144767
+        },
+        {
+          "cached_blocks": 18,
+          "prefill_ms": 352.4744399765041
+        },
+        {
+          "cached_blocks": 24,
+          "prefill_ms": 0.0
+        }
+      ],
+      "total_blocks": 24
+    }
+  ],
+  "measurement_source": "cpu_device_measured",
+  "points": [
+    {
+      "cached_blocks": 0,
+      "cached_tokens": 0,
+      "computed_tokens": 384,
+      "prefill_ms": 1210.6683010060806,
+      "prefill_ms_max": 1333.6261099902913,
+      "prefill_ms_min": 1200.6692840077449,
+      "prefill_ms_p90": 1286.147278395947,
+      "prompt_tokens": 384,
+      "relative_spread": 0.07060397494273941,
+      "repeats": 5,
+      "total_blocks": 24
+    },
+    {
+      "cached_blocks": 6,
+      "cached_tokens": 96,
+      "computed_tokens": 288,
+      "prefill_ms": 888.8467239739839,
+      "prefill_ms_max": 889.6390050067566,
+      "prefill_ms_min": 880.7174740068149,
+      "prefill_ms_p90": 889.5666142110713,
+      "prompt_tokens": 384,
+      "relative_spread": 0.009955754986295489,
+      "repeats": 5,
+      "total_blocks": 24
+    },
+    {
+      "cached_blocks": 12,
+      "cached_tokens": 192,
+      "computed_tokens": 192,
+      "prefill_ms": 609.2761490144767,
+      "prefill_ms_max": 610.6860630097799,
+      "prefill_ms_min": 605.7113319984637,
+      "prefill_ms_p90": 610.5826930142939,
+      "prompt_tokens": 384,
+      "relative_spread": 0.007995325311371156,
+      "repeats": 5,
+      "total_blocks": 24
+    },
+    {
+      "cached_blocks": 18,
+      "cached_tokens": 288,
+      "computed_tokens": 96,
+      "prefill_ms": 352.4744399765041,
+      "prefill_ms_max": 352.6017740077805,
+      "prefill_ms_min": 350.69164499873295,
+      "prefill_ms_p90": 352.55312800290994,
+      "prompt_tokens": 384,
+      "relative_spread": 0.005281185791233757,
+      "repeats": 5,
+      "total_blocks": 24
+    },
+    {
+      "cached_blocks": 24,
+      "cached_tokens": 384,
+      "computed_tokens": 0,
+      "prefill_ms": 0.0,
+      "prefill_ms_max": 0.0,
+      "prefill_ms_min": 0.0,
+      "prefill_ms_p90": 0.0,
+      "prompt_tokens": 384,
+      "relative_spread": 0.0,
+      "repeats": 5,
+      "total_blocks": 24
+    }
+  ],
+  "provenance": {
+    "attn_implementation": "sdpa",
+    "block_size": 16,
+    "device_note": "MEASURED ON CPU. No NVIDIA device exists on this host, so this profile must not be read as a GPU prefill measurement.",
+    "dtype": "float32",
+    "hardware": {
+      "cpu_count": 32,
+      "cpu_model": "AMD EPYC 9K65 192-Core Processor",
+      "device": "cpu",
+      "machine": "x86_64",
+      "memory_total_kib": 129308476,
+      "platform": "Linux-6.6.117-45.19.1.tl4.x86_64-x86_64-with-glibc2.39",
+      "processor": "x86_64"
+    },
+    "measured_at_utc": "2026-11-15T13:18:41Z",
+    "model_name": "Qwen/Qwen2.5-Coder-0.5B-Instruct",
+    "model_revision": "unknown",
+    "repeats": 5,
+    "runtime_mode": "transformers-prefill-probe",
+    "torch_threads": 4,
+    "torch_version": "2.10.0+cu128",
+    "vllm_version": "0.27.1",
+    "warmup": 1
+  },
+  "quality": {
+    "all_monotonic": true,
+    "per_length": [
+      {
+        "monotonic": true,
+        "ms_saved_per_cached_block_max": 58.74573999608401,
+        "ms_saved_per_cached_block_min": 42.800284839662105,
+        "noise_floor_ms": 85.4779943882022,
+        "prompt_tokens": 384,
+        "resolvable": false,
+        "total_blocks": 24,
+        "total_saving_ms": 1210.6683010060806,
+        "violations": []
+      }
+    ]
+  },
+  "schema_version": "kvopt.asym_apc.prefill_calibration_profile.v1"
+}
