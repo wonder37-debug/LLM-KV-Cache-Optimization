@@ -384,7 +384,7 @@ def test_report_ignores_post_prefill_snapshot_hits(tmp_path: Path) -> None:
         if event["event_type"] == "VLLM_PREFIX_SNAPSHOT":
             # The full prompt is resident AFTER prefill, not a request-time hit.
             event["payload"]["reusable_token_count"] = 96
-    path.write_text("\\n".join(json.dumps(e) for e in events) + "\\n")
+    path.write_text("\n".join(json.dumps(e) for e in events) + "\n")
     metrics = report.run_metrics(report.load_run(run_dir))
     assert metrics["recomputed_prefill_tokens"] == 128
     assert metrics["prefix_hit_rate"] == pytest.approx(64 / 192)
@@ -409,7 +409,7 @@ def test_report_rejects_missing_native_request_observation(tmp_path: Path) -> No
         if not (e["event_type"] == "VLLM_NATIVE_REQUEST_OBSERVATION"
                 and e["request_id"] == "p:2")
     ]
-    path.write_text("\\n".join(json.dumps(e) for e in events) + "\\n")
+    path.write_text("\n".join(json.dumps(e) for e in events) + "\n")
     metrics = report.run_metrics(report.load_run(run_dir))
     assert metrics["recomputed_prefill_tokens"] is None
     assert "request_observation_count:p:2:0" in metrics["recomputed_prefill_tokens_reason"]
