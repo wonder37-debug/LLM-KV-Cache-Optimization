@@ -139,8 +139,13 @@ def test_materialize_screening_campaign(tmp_path: Path) -> None:
             == a0["backend_options"][option]
             == asym["backend_options"][option]
         )
+    from kvopt.workload.phase2c_native_pilot import PILOT_PREFIX_GENERATOR_VERSION
+
     assert asym["backend_options"]["phase2c_prefix_generator_version"] == (
-        "kvopt.asym_apc.segments.v1"
+        PILOT_PREFIX_GENERATOR_VERSION
+    )
+    assert a0["backend_options"]["phase2c_prefix_generator_version"] == (
+        PILOT_PREFIX_GENERATOR_VERSION
     )
 
 
@@ -217,6 +222,12 @@ def _write_run(
     events = [
         _event("REQUEST_ARRIVED", 1.0, {"kind": "turn"}, "p:1"),
         _event(
+            "VLLM_NATIVE_REQUEST_OBSERVATION",
+            1.15,
+            {"native_prompt_tokens": 96, "native_cached_prefix_tokens": reusable[0]},
+            "p:1",
+        ) if segments is not None else None,
+        _event(
             "VLLM_PREFIX_SNAPSHOT",
             1.2,
             {"reusable_token_count": reusable[0]},
@@ -225,6 +236,12 @@ def _write_run(
         _event("VLLM_REQUEST_COMPLETED", 1.5, {"output_token_count": 1}, "p:1"),
         _event("REQUEST_ARRIVED", 2.0, {"kind": "turn"}, "p:2"),
         _event(
+            "VLLM_NATIVE_REQUEST_OBSERVATION",
+            2.15,
+            {"native_prompt_tokens": 96, "native_cached_prefix_tokens": reusable[1]},
+            "p:2",
+        ) if segments is not None else None,
+        _event(
             "VLLM_PREFIX_SNAPSHOT",
             2.2,
             {"reusable_token_count": reusable[1]},
@@ -232,6 +249,9 @@ def _write_run(
         ),
         _event("VLLM_REQUEST_COMPLETED", 2.7, {"output_token_count": 1}, "p:2"),
     ]
+    # Keep missing request-time evidence unavailable, never replace with a
+    # post-prefill snapshot merely because the latter is present.
+    events = [event for event in events if event is not None]
     if arm == "ASYM_APC":
         events.append(
             _event(
@@ -339,11 +359,61 @@ def test_report_marks_unavailable_prompt_token_counts(tmp_path: Path) -> None:
     metrics = report.run_metrics(evidence)
     assert metrics["recomputed_prefill_tokens"] is None
     assert metrics["recomputed_prefill_tokens_reason"].startswith(
-        "prompt_token_count_unavailable"
+        "native_request_time_cache_evidence_incomplete"
     )
     assert metrics["prefix_hit_rate"] is None
-    assert metrics["mean_reusable_prefix_tokens"] == 32.0
+    assert metrics["mean_reusable_prefix_tokens"] is None
 
+
+
+def test_report_ignores_post_prefill_snapshot_hits(tmp_path: Path) -> None:
+    run_dir = _write_run(
+        tmp_path,
+        run_id="cold-then-hit",
+        arm="A0",
+        case_id="case",
+        regime="high",
+        repeat=1,
+        reusable=(0, 64),
+        segments={"p:1": [["head", 64], ["body", 32]], "p:2": [["head", 64], ["body2", 32]]},
+        divergent=False,
+    )
+    path = run_dir / "events.jsonl"
+    events = [json.loads(row) for row in path.read_text().splitlines()]
+    for event in events:
+        if event["event_type"] == "VLLM_PREFIX_SNAPSHOT":
+            # The full prompt is resident AFTER prefill, not a request-time hit.
+            event["payload"]["reusable_token_count"] = 96
+    path.write_text("\\n".join(json.dumps(e) for e in events) + "\\n")
+    metrics = report.run_metrics(report.load_run(run_dir))
+    assert metrics["recomputed_prefill_tokens"] == 128
+    assert metrics["prefix_hit_rate"] == pytest.approx(64 / 192)
+
+
+def test_report_rejects_missing_native_request_observation(tmp_path: Path) -> None:
+    run_dir = _write_run(
+        tmp_path,
+        run_id="missing-native",
+        arm="A0",
+        case_id="case",
+        regime="high",
+        repeat=1,
+        reusable=(0, 64),
+        segments={"p:1": [["head", 64], ["body", 32]], "p:2": [["head", 64], ["body2", 32]]},
+        divergent=False,
+    )
+    path = run_dir / "events.jsonl"
+    events = [json.loads(row) for row in path.read_text().splitlines()]
+    events = [
+        e for e in events
+        if not (e["event_type"] == "VLLM_NATIVE_REQUEST_OBSERVATION"
+                and e["request_id"] == "p:2")
+    ]
+    path.write_text("\\n".join(json.dumps(e) for e in events) + "\\n")
+    metrics = report.run_metrics(report.load_run(run_dir))
+    assert metrics["recomputed_prefill_tokens"] is None
+    assert "request_observation_count:p:2:0" in metrics["recomputed_prefill_tokens_reason"]
+    assert metrics["prefix_hit_rate"] is None
 
 def test_campaign_runner_rejects_unknown_run_ids(tmp_path: Path) -> None:
     manifest = {
