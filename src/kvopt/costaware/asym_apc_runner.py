@@ -340,6 +340,10 @@ class AsymAPCDecision:
     # from the timestamp clock so that a coarse or synthetic clock can never
     # masquerade as a decision-cost measurement.
     selector_overhead_ns: int = 0
+    # Which arithmetic path produced the ranking: full re-sum or delta. The
+    # decision itself is the same function either way; this makes the provenance
+    # of a measured overhead record self-describing.
+    loss_evaluation: str = ""
 
     @property
     def reason_category(self) -> str:
@@ -363,6 +367,7 @@ class AsymAPCDecision:
             "selected_victim_block_ids": tuple(self.audit.selected),
             "victim_set_differs": self.audit.victim_set_differs,
             "reason": self.audit.reason,
+            "loss_evaluation": self.loss_evaluation or None,
             "reason_category": self.reason_category,
             "baseline_proxy_ms": self.audit.baseline_proxy_ms,
             "selected_proxy_ms": self.audit.selected_proxy_ms,
@@ -452,6 +457,7 @@ class InstrumentedAsymAPCCoordinator:
             audit=audit,
             selector_overhead_seconds=float(elapsed),
             selector_overhead_ns=int(elapsed_ns),
+            loss_evaluation=str(getattr(self._coordinator, "loss_evaluation", "")),
             execution_context=(
                 dict(self._context_provider()) if self._context_provider is not None else {}
             ),
@@ -755,6 +761,7 @@ def build_asym_apc_arm(
     allowed_sources: Sequence[str] = DEFAULT_ALLOWED_MEASUREMENT_SOURCES,
     cost_model: str = "contiguous_prefix",
     weighting: str = "two_timescale",
+    loss_evaluation: str = "incremental",
 ) -> tuple[InstrumentedAsymAPCCoordinator, AsymAPCProfile, PhysicalEvictionReconciler]:
     """Build the gated arm, refusing to start without a measured profile."""
     profile = load_calibration_profile(
@@ -773,6 +780,7 @@ def build_asym_apc_arm(
         clock_domain=config.clock_domain,
         cost_model=cost_model,
         weighting=weighting,
+        loss_evaluation=loss_evaluation,
     )
     instrumented = InstrumentedAsymAPCCoordinator(
         coordinator,

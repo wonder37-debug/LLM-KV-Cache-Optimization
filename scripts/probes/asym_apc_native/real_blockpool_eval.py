@@ -460,6 +460,7 @@ def run_arm(
     decay_alpha: float = 60.0,
     decay_beta: float = 12.0,
     decay_knee: float = 60.0,
+    loss_evaluation: str = "incremental",
 ) -> ArmResult:
     from kvopt.continuum.retention import RetentionManager
     from kvopt.costaware.a2_native import A2NativeChainSnapshot, A2NativeSnapshotRegistry
@@ -515,6 +516,7 @@ def run_arm(
             config=config,
             cost_model=str(spec.cost_model),
             weighting=str(spec.weighting),
+            loss_evaluation=loss_evaluation,
             # Decision CPU overhead must be measured with the real clock,
             # not the synthetic workload clock that is constant during selection.
             clock=time.perf_counter,

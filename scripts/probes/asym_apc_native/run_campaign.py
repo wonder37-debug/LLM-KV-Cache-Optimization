@@ -77,6 +77,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--decay-alpha", type=float, default=60.0)
     parser.add_argument("--decay-beta", type=float, default=12.0)
     parser.add_argument("--decay-knee", type=float, default=60.0)
+    parser.add_argument(
+        "--loss-evaluation",
+        default="incremental",
+        choices=("incremental", "full"),
+        help="how the search prices a candidate set (identical decisions expected)",
+    )
     parser.add_argument("--label", default="")
     parser.add_argument("--out-dir", required=True)
     args = parser.parse_args(argv)
@@ -135,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
                         decay_alpha=args.decay_alpha,
                         decay_beta=args.decay_beta,
                         decay_knee=args.decay_knee,
+                        loss_evaluation=args.loss_evaluation,
                     )
                     elapsed = time.perf_counter() - started
                     summary = probe.summarise(result, measurement_source=measurement_source)
@@ -214,6 +221,9 @@ def main(argv: list[str] | None = None) -> int:
                         "alpha_seconds": args.decay_alpha,
                         "beta_seconds": args.decay_beta,
                         "knee_seconds": args.decay_knee,
+                    },
+                    "selector": {
+                        "loss_evaluation": args.loss_evaluation,
                     },
                     "label": args.label,
                     "calibration": {
