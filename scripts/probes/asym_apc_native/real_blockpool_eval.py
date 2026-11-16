@@ -384,6 +384,8 @@ class ArmResult:
     decisions: list[dict[str, object]] = field(default_factory=list)
     pressure_events: int = 0
     physically_evicted: int = 0
+    pressure_retention_entries: list[int] = field(default_factory=list)
+    pressure_protected_entries: list[int] = field(default_factory=list)
     fallbacks: int = 0
     unavailable_reason: str | None = None
 
@@ -497,6 +499,13 @@ def run_arm(
         """Ask the arm for ``required`` victims and hand them to allocation."""
         result.pressure_events += 1
         sync_entries(timestamp)
+        # Record actual Continuum state in each controlled arm, not only the
+        # victim ids. This makes retention-state parity auditable after replay.
+        entry_snapshots = manager.planning_snapshots()
+        result.pressure_retention_entries.append(len(entry_snapshots))
+        result.pressure_protected_entries.append(
+            sum(bool(entry.protected) for entry in entry_snapshots)
+        )
         blocks = substrate.free_queue_blocks()
         chosen: list[int] = []
         integration.apply_pressure(
@@ -643,6 +652,14 @@ def summarise(result: ArmResult, *, measurement_source: str) -> dict[str, object
         "requests_completed": len(completed),
         "requests_stalled": len(result.requests) - len(completed),
         "pressure_events": result.pressure_events,
+        "retention_entries_at_pressure_max": max(result.pressure_retention_entries, default=0),
+        "protected_entries_at_pressure_max": max(result.pressure_protected_entries, default=0),
+        "pressure_events_with_retention_entries": sum(
+            n > 0 for n in result.pressure_retention_entries
+        ),
+        "pressure_events_with_protected_entries": sum(
+            n > 0 for n in result.pressure_protected_entries
+        ),
         "physically_evicted_blocks": result.physically_evicted,
         "total_prompt_tokens": sum(int(value) for value in prompt_tokens),
         "total_recomputed_tokens": sum(int(value) for value in recomputed),
