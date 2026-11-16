@@ -423,7 +423,11 @@ def run_arm(
     profile = load_calibration_profile(
         profile_path, expected_sha256=profile_sha, allowed_sources=allowed_sources
     )
-    registry: A2NativeSnapshotRegistry | None = None
+    # Both controlled arms must observe and maintain the same Retention Entry
+    # lifecycle. Otherwise A0 is merely Native LRU with an empty entry table.
+    registry: A2NativeSnapshotRegistry | None = (
+        A2NativeSnapshotRegistry() if arm in {"a0", "asym_apc"} else None
+    )
     arm_coordinator = None
     if arm == "asym_apc":
         config = parse_policy_config(
@@ -431,9 +435,9 @@ def run_arm(
                 "enabled": True,
                 "profile_path": str(profile_path),
                 "profile_sha256": profile_sha,
-                "alpha_seconds": 5.0,
-                "beta_seconds": 60.0,
-                "knee_seconds": 1.0,
+                "alpha_seconds": 60.0,
+                "beta_seconds": 12.0,
+                "knee_seconds": 60.0,
                 "tau_seconds": 30.0,
                 "max_exact_subsets": 12,
                 "max_greedy_operations": 200000,
@@ -442,11 +446,13 @@ def run_arm(
             repo_root=REPO_ROOT,
             clock_domain="probe_monotonic",
         )
-        registry = A2NativeSnapshotRegistry()
+        assert registry is not None
         arm_coordinator, profile, _reconciler = build_asym_apc_arm(
             registry=registry,
             config=config,
-            clock=lambda: clock.now(),
+            # Decision CPU overhead must be measured with the real clock,
+            # not the synthetic workload clock that is constant during selection.
+            clock=time.perf_counter,
             allowed_sources=allowed_sources,
         )
     deadlines: dict[str, float] = {}
@@ -575,9 +581,10 @@ def run_arm(
                 observed_at=clock.now(),
                 clock_domain="probe_monotonic",
             )
-            arm_coordinator.coordinator.observe_chain_access(
-                f"{turn.program}:{PREFIX_KEY}", clock.now()
-            )
+            if arm_coordinator is not None:
+                arm_coordinator.coordinator.observe_chain_access(
+                    f"{turn.program}:{PREFIX_KEY}", clock.now()
+                )
 
         recomputed_tokens = (turn.prompt_blocks - hit_blocks) * BLOCK_TOKENS
         prefill_ms = None
