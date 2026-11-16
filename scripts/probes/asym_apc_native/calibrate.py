@@ -86,6 +86,34 @@ def _prompt_token_ids(
     return [offset + index for index in range(count)]
 
 
+def tokens_for_repetition(
+    base_tokens: list[int],
+    *,
+    cached_blocks: int,
+    block_size: int,
+    repetition: int,
+    vocabulary_size: int,
+) -> list[int]:
+    """Make each uncached suffix distinct while preserving the seeded prefix.
+
+    Reusing the exact full prompt would fill the full APC cache on the first
+    warm-up; all later samples would incorrectly hit more than cached_blocks.
+    The first token *after* the cached boundary is varied per repetition.
+    For a fully cached prompt (r == m), the same prompt is intentionally reused.
+    """
+    if repetition < 0 or vocabulary_size < 2 or block_size < 1:
+        raise ValueError("invalid repetition, vocabulary size or block size")
+    offset = cached_blocks * block_size
+    if not 0 <= offset <= len(base_tokens):
+        raise ValueError("cached prefix exceeds prompt")
+    candidate = list(base_tokens)
+    if offset < len(candidate):
+        candidate[offset] = (candidate[offset] + repetition + 1) % vocabulary_size
+        if candidate[offset] == base_tokens[offset]:
+            raise ValueError("suffix token did not change")
+    return candidate
+
+
 def measure_point(
     *,
     model: str,
@@ -145,7 +173,16 @@ def measure_point(
     def run_once(index: int, *, warmup: bool) -> None:
         torch.cuda.synchronize()
         started = time.perf_counter()
-        outputs = llm.generate([{"prompt_token_ids": tokens}], sampling, use_tqdm=False)
+        sample_tokens = tokens_for_repetition(
+            tokens,
+            cached_blocks=cached_blocks,
+            block_size=block_size,
+            repetition=index,
+            vocabulary_size=vocabulary_size,
+        )
+        outputs = llm.generate(
+            [{"prompt_token_ids": sample_tokens}], sampling, use_tqdm=False
+        )
         torch.cuda.synchronize()
         elapsed = time.perf_counter() - started
         cached, source = _read_cached_tokens(outputs[0])
@@ -171,7 +208,8 @@ def measure_point(
     for index in range(warmups):
         run_once(index, warmup=True)
     for index in range(repeats):
-        run_once(index, warmup=False)
+        # Warm-up and measurement samples must not reuse the same suffix.
+        run_once(warmups + index, warmup=False)
 
     provenance = environment_provenance(
         model_name=model,
