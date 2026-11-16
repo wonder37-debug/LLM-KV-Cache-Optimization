@@ -12,6 +12,11 @@ selector can change physical cache state on one workload. This work asks *how mu
 survives* when the workload is varied, when the algorithm is ablated, and when the CPU cost of
 deciding is charged against the modelled saving. Two of those three answers are negative.
 
+**Later addition (§7):** the decision cost this report originally measured has been reduced
+3.6× per decision and 4.5× per run by pricing candidates as deltas instead of re-summing the
+loss, verified to return the identical victims on 4 357 held-out decisions plus two smaller
+matrices. The GPU situation is unchanged: still no device, still no latency claim.
+
 ---
 
 ## 1. Source commit and execution environment
@@ -138,6 +143,10 @@ The three zero rows are not evidence of failure: at 128 the workload thrashes (e
 misses its whole prompt regardless of victims), at 296/320 the cache fits and nothing is
 evicted.
 
+The same 12 capacities were later re-run under the delta-priced search of §7 (the current
+default) and matched this table and the committed artifacts row for row, so the reproduction is
+stable across the arithmetic path as well as across runs.
+
 Two further audit facts are recorded per decision rather than summarised away. The baseline
 victim list in every decision record is the **actual free-queue order** the native allocator
 would have consumed at that instant, so "we compared against native order" is checkable
@@ -219,39 +228,84 @@ Only the three families with complete, in-coverage evidence produce large effect
 ## 7. Selector overhead and scalability
 
 Measured with `time.perf_counter_ns()` around the `select_victims` call only, on an otherwise
-idle host, two identical passes (token counts bit-identical across passes; p50 differs 13 %).
+idle host, with the two implementations run back to back in the same session.
 
-| Capacity | Decisions | p50 | p90 | p95 | max | Total CPU | Modelled prefill saved | Saving / overhead |
+**Two arithmetic paths, one decision function.** The earlier sections price every candidate by
+re-summing the whole loss, which rebuilds a prefix-length map over all involved chains for each
+of the `victims × candidates` combinations. The loss is separable in the deepest surviving block
+of each chain, so a candidate can instead be priced from its own memberships against the current
+truncation point. `loss_evaluation` selects the path:
+
+| Path | Per-candidate cost | Used by |
+| --- | --- | --- |
+| `full` | O(candidates × chains × victims) | every campaign committed before this change, and `--loss-evaluation full` today |
+| `incremental` | O(candidates × memberships × victims) | default since this change |
+
+Both paths rank by the same function, and both still report `baseline_proxy_ms` /
+`selected_proxy_ms` from the original full formula, so the reported gains are untouched. The
+independent-block model additionally reproduces the *addition order* of the full sum, because a
+long float sum with reordered terms can break a tie differently.
+
+**Identity is checked before cost is compared.** `compare_campaigns.py` matches two campaigns row
+by row — every request row, and every decision's candidate counts, baseline and selected victim
+IDs, reason, proxy milliseconds and missing-evidence counts:
+
+| Comparison | Cells | Requests | Decisions | Identical |
+| --- | ---: | ---: | ---: | --- |
+| Held-out campaign replayed under `incremental` vs the committed full-sum artifacts | 48 | 7 728 | 4 357 | **yes** |
+| Capacity sweep, `full` vs `incremental` | 12 | 1 440 | 448 | **yes** |
+| Family sweep, `full` vs `incremental` | 16 | 1 288 | 482 | **yes** |
+
+Only `selector_overhead_ns` and the `loss_evaluation` label differ. (The first replay attempt was
+*not* identical: `recency_only` reordered ties in 3 of 40 decisions in 4 cells, which is why the
+independent-block path now replays the addition sequence instead of summing a delta.)
+
+Capacity sweep, `asym_apc` arm, seed 20260101, 40 requests per cell (24 above 288 blocks because
+the pool stops evicting for 16 of them):
+
+| Capacity | Decisions | p50 full → delta | p95 full → delta | max full → delta | Total CPU full → delta | Speed-up | Modelled saving | Saving / delta cost |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 128 | 40 | 7.02 ms | 22.7 ms | 23.0 ms | 25.1 ms | 461 ms | 0 ms | 0× |
-| 192 | 40 | 7.28 ms | 44.0 ms | 44.3 ms | 45.7 ms | 696 ms | 1 115 ms | 1.6× |
-| 256 | 40 | 9.63 ms | 66.9 ms | 67.1 ms | 67.6 ms | 841 ms | 4 416 ms | 5.3× |
-| 288 | 40 | 5.48 ms | 11.3 ms | 11.5 ms | 11.6 ms | 241 ms | 23 708 ms | 98.6× |
+| 128 | 40 | 6.48 → 2.05 ms | 23.0 → 4.5 ms | 25.1 → 4.6 ms | 459 → 102 ms | 4.5× | 0 ms | 0× |
+| 160 | 40 | 8.61 → 2.27 ms | 32.4 → 5.9 ms | 35.2 → 6.3 ms | 597 → 121 ms | 4.9× | 1 115 ms | 9.2× |
+| 192 | 40 | 7.21 → 2.11 ms | 44.5 → 6.9 ms | 44.6 → 7.3 ms | 683 → 133 ms | 5.1× | 1 117 ms | 8.4× |
+| 224 | 40 | 8.59 → 2.35 ms | 55.9 → 8.2 ms | 58.9 → 12.4 ms | 727 → 141 ms | 5.2× | 2 069 ms | 14.7× |
+| 240 | 40 | 8.37 → 2.18 ms | 61.2 → 8.5 ms | 69.2 → 8.5 ms | 766 → 138 ms | 5.6× | 2 921 ms | 21.2× |
+| 256 | 40 | 9.59 → 2.29 ms | 72.6 → 9.1 ms | 73.2 → 9.8 ms | 843 → 145 ms | 5.8× | 4 416 ms | 30.4× |
+| 264 | 40 | 9.61 → 2.31 ms | 50.3 → 7.7 ms | 52.8 → 7.8 ms | 673 → 133 ms | 5.1× | 6 871 ms | 51.8× |
+| 272 | 40 | 9.00 → 2.27 ms | 35.5 → 6.1 ms | 35.6 → 6.2 ms | 512 → 114 ms | 4.5× | 12 572 ms | 110× |
+| 280 | 40 | 7.81 → 2.20 ms | 22.7 → 4.3 ms | 23.6 → 4.4 ms | 389 → 95 ms | 4.1× | 18 598 ms | 196× |
+| 288 | 40 | 5.76 → 2.12 ms | 11.9 → 2.7 ms | 12.0 → 2.8 ms | 246 → 79 ms | 3.1× | 23 708 ms | 301× |
+| 292 | 40 | 3.39 → 1.71 ms | 12.1 → 2.7 ms | 12.5 → 2.8 ms | 200 → 69 ms | 2.9× | 27 368 ms | 395× |
+| 296 | 24 | 5.12 → 2.01 ms | 12.5 → 3.0 ms | 12.9 → 3.5 ms | 163 → 48 ms | 3.4× | 0 ms | 0× |
+| 320 | 24 | 6.06 → 2.41 ms | 13.1 → 3.0 ms | 14.8 → 3.0 ms | 181 → 53 ms | 3.4× | 0 ms | 0× |
 
-Scaling, pooled over 1 450 real decisions (held-out campaign):
+Median per-decision speed-up 3.6× (p50), median per-cell total 4.5×; across the eight families
+the same two figures are 3.4× and 4.2×, with p95 falling from 12–69 ms to 3–9 ms.
 
-| Dimension | Spearman ρ vs overhead |
-| --- | ---: |
-| Legal candidate count | 0.33 |
-| Required victim count | 0.33 |
-| Observed chain count | 0.015 |
+Scaling, 482 real decisions (family sweep, `incremental`):
 
-* Overhead grows with the **product** of candidates and victims, which is the greedy search's
-  arithmetic: `take × |members|` loss evaluations, each rebuilding a prefix-length map over all
-  involved chains and scanning the curve linearly. At 256 blocks that is ≈24 × 120 evaluations,
-  i.e. ~2.5 µs per evaluation.
-* **Exact enumeration never runs.** `C(n, k) ≤ 12` is unreachable at realistic candidate counts
-  (120 candidates, 24 victims → 10^25 subsets), so every decision is greedy
-  (`exact_search_decisions = 0` in every cell). Exact-vs-greedy is therefore not a trade-off
-  this implementation can make; it is only available for tiny victim counts.
-* **Chain count is irrelevant** (ρ ≈ 0.015): per-chain work is O(1) after the curve lookup, so
-  the cost is driven by candidate enumeration, not by the number of sessions.
-* **The overhead is not free.** At 128 blocks it is pure cost (461 ms, zero saving). At 192 the
-  modelled saving is only 1.6× the overhead. On a GPU, prefill is 10–100× faster than this CPU
-  curve, so the 256-block margin (5.3×) becomes roughly 0.05–0.5× — i.e. **the selector as
-  currently implemented would likely cost more than it saves in a real serving loop.** That is
-  an engineering defect, not a property of the policy: the same selection can be computed
-  incrementally, but this implementation does not.
+| Dimension | Spearman ρ, full | Spearman ρ, delta |
+| --- | ---: | ---: |
+| Legal candidate count | 0.33 | 0.45 |
+| Required victim count | 0.30 | 0.25 |
+| Observed chain count | 0.02 | 0.24 |
+
+* The cost still follows the **product** of candidates and victims, but with the per-candidate
+  constant cut by the chain factor: at ≥193 legal candidates the stratified p50 falls from
+  9.84 ms to 2.67 ms and p90 from 27.3 ms to 5.0 ms. At ≤32 candidates nothing improves
+  (1.25 → 0.97 ms) because the fixed per-decision work dominates there.
+* **Chain count starts to matter** (ρ 0.02 → 0.24) for the obvious reason: a candidate is now
+  priced by its own memberships, so a block in two chains costs twice as much as one in one.
+* **Exact enumeration still never runs.** `C(n, k) ≤ 12` is unreachable at realistic candidate
+  counts, so every decision remains greedy (`exact_search_decisions = 0` in every cell).
+* **What this fixes, and what it does not.** At 256 blocks the modelled CPU saving is 4 416 ms
+  against 145 ms of decision cost (30×, was 5.3×); at 192 blocks it is 1 117 ms against 133 ms
+  (8.4×, was 1.6×); at 128 blocks there is still no saving to cover anything. Since GPU prefill
+  is 10–100× faster than this CPU curve, those two margins become roughly 0.3–3× and
+  0.08×–0.84× on real hardware — a plausible-but-unproven range rather than a confident win.
+  The remaining cost is inherent to a greedy O(victims × candidates) search that prices each
+  candidate at Python speed; removing it needs a different search (lazy top-k with a heap and
+  monotone bounds), which has **not** been attempted here.
 
 ## 8. Fallback and evidence coverage
 
@@ -321,8 +375,11 @@ complete evidence, and by ≤5 % when evidence is incomplete.*
 beats the combination in all 48 held-out cells.*
 
 *It is not ready to deploy. The policy is gated by calibration coverage (prompt lengths must be
-measured), by evidence completeness (append-only chains), and by a decision cost of 5–10 ms that
-the modelled saving does not always repay, and would repay far less on a GPU.*
+measured), by evidence completeness (append-only chains), and by a decision cost that the modelled
+saving only repays under pressure: 2–3 ms per decision after the delta-priced rewrite (§7), which
+is 8–30× covered by the modelled CPU saving between 192 and 256 blocks and 0× at 128. On a GPU
+that cover shrinks by one to two orders of magnitude, so the deployment question is open, not
+closed.*
 
 ### Limitations
 
@@ -334,6 +391,8 @@ the modelled saving does not always repay, and would repay far less on a GPU.*
   and capacities, not from repetition of the same cell.
 * Calibration uses `Qwen2.5-Coder-0.5B` in float32 on CPU; the substitution is recorded in the
   profile provenance.
+* The decision-cost improvement in §7 is a CPU-Python measurement. It says nothing about the cost
+  of the same policy inside a serving loop, where the decision would have to fit between batches.
 
 ### Reproduction
 
@@ -367,6 +426,21 @@ python scripts/probes/asym_apc_native/run_campaign.py \
 # analysis tables
 python scripts/probes/asym_apc_native/analyze_campaign.py \
   --campaign out/heldout --out-dir out/analysis
+
+# decision-identity check: any two campaigns that must agree, row by row
+python scripts/probes/asym_apc_native/compare_campaigns.py \
+  --baseline docs/experiments/asym-apc-independent-validation-artifacts/campaigns/overhead-capacity-full \
+  --candidate docs/experiments/asym-apc-independent-validation-artifacts/campaigns/overhead-capacity-delta \
+  --out out/identity.json
+
+# before/after decision cost for the same matrix
+python scripts/probes/asym_apc_native/summarize_overhead_ab.py \
+  --full <campaign full> --incremental <campaign delta> \
+  --out-csv out/overhead-ab.csv --out-md out/overhead-ab.md
+
+# rebuild or verify the artifact manifest
+python scripts/probes/asym_apc_native/build_artifacts_manifest.py \
+  --artifacts docs/experiments/asym-apc-independent-validation-artifacts --check
 ```
 
 ## 11. Negative and inconclusive results
@@ -385,8 +459,17 @@ python scripts/probes/asym_apc_native/analyze_campaign.py \
    committed as evidence of the attempt and **is not used for any number in this report**.
    Extending coverage requires a quiet host and 32-token depth steps, which is hours of CPU
    prefill, not minutes.
-5. **The overhead result is inconclusive at 192 blocks** (1.6× margin) and negative at 128
-   (zero saving, 461 ms cost).
+5. **The overhead result was negative at 128 blocks** (zero saving against 459 ms of decision
+   cost) and inconclusive at 192 (1.6× margin) while the search re-summed the loss for every
+   candidate. The delta-priced rewrite in §7 removes most of that cost but not the sign: 128
+   blocks still has nothing to save, and the 192-block cover is 8.4× only because the saving is
+   modelled from a CPU prefill curve.
+6. **The first attempt at the delta path changed decisions.** It reordered ties in
+   `recency_only` on 3 of 40 decisions in 4 of the 48 held-out cells — same victim sets, same
+   recomputed tokens, different order — because a long float sum reorders when terms are added
+   as a pre-summed delta. It was caught by the row-by-row campaign comparison and fixed by
+   replaying the addition sequence; without that check it would have shipped as "mathematically
+   equivalent". 
 
 ## 12. Direct answers
 
@@ -420,13 +503,15 @@ lengths — `profile_missing` removes 5 776 candidate blocks in `program_turn_sc
 −0.9 % result that reflects unmeasured lengths, not a bad decision rule.
 
 **5. Does the measured CPU decision overhead offset the savings?**
-At the extremes, yes; in the middle, only barely. Per-run CPU cost is 241–841 ms for 40
-decisions (p50 5.5–9.6 ms, p95 up to 67 ms). The modelled prefill saving is 0× at 128 blocks,
-1.6× at 192, 5.3× at 256 and 98.6× at 288. Because those milliseconds come from a CPU prefill
-curve and GPU prefill is 10–100× faster, the 5.3× margin at 256 blocks would plausibly invert on
-a GPU. The overhead is removable — the greedy loop repeats an O(candidates × chains) loss
-evaluation it could update incrementally — but it has not been removed here, so the honest
-answer is: **the current implementation is not overhead-safe for serving.**
+Not before this work; partly after it. The full-sum search cost 200–843 ms per 40-decision run
+(p50 3.4–9.6 ms, p95 up to 73 ms) and was covered 0× at 128 blocks, 1.6× at 192 and 5.3× at 256 —
+which is why the honest answer used to be "not overhead-safe". Pricing candidates as deltas
+(§7) removes 3.6× per decision and 4.5× per run *without changing a single victim*: 145 ms per
+run at 256 blocks, covered 30× by the modelled saving, and 133 ms at 192, covered 8.4×. Since
+those savings come from a CPU prefill curve and GPU prefill is 10–100× faster, the 256-block
+margin translates to roughly 0.3–3× on real hardware. So the answer is now: **the decision cost
+is no longer absurd, but it is still not proven safe**, and the remaining O(victims × candidates)
+greedy scan needs a different search algorithm, not another constant factor.
 
 **6. What evidence supports or prevents a Native GPU performance claim?**
 Nothing supports it. No CUDA device was present (`torch.cuda.is_available() == False`, no

@@ -1,0 +1,2 @@
+cell,family,capacity,decisions,tokens_full,tokens_incremental,full_p50_ms,full_p90_ms,full_p95_ms,full_max_ms,full_total_ms,incremental_p50_ms,incremental_p90_ms,incremental_p95_ms,incremental_max_ms,incremental_total_ms,speedup_total,modelled_saving_ms,cover_full,cover_incremental
+legacy_round_robin-cap192-s20260101,legacy_round_robin,192,40,18400,18400,7.207552,43.535183100000005,44.48090235,44.566371,682.807947,2.1103015,6.8419678,6.9358973,7.261076,133.022434,5.13302851607722,1114.5412938106674,1.632291039826851,8.378596453968564

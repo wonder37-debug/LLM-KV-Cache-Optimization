@@ -1,0 +1,210 @@
+{
+  "arms": {
+    "executed": [
+      "a0",
+      "asym_apc"
+    ],
+    "specs": {
+      "a0": {
+        "cost_model": null,
+        "note": "Continuum Entry Release + native victim order",
+        "retains": true,
+        "weighting": null
+      },
+      "asym_apc": {
+        "cost_model": "contiguous_prefix",
+        "note": "combined: contiguous-prefix cost + two-timescale recency",
+        "retains": true,
+        "weighting": "two_timescale"
+      }
+    }
+  },
+  "calibration": {
+    "accepted_sources": [
+      "cpu_device_measured"
+    ],
+    "measurement_source": "cpu_device_measured",
+    "profile_path": "/workspace/repo-git/docs/experiments/asym-apc-native-evaluation-artifacts/calibration/cpu-device-prefill-v1.json",
+    "profile_sha256": "6266f3fe1a923dd14b0b05811c0978e564f52f566927bd7942486bf29c364e78"
+  },
+  "cell_wall_seconds": 0.1619153760257177,
+  "decay": {
+    "alpha_seconds": 60.0,
+    "beta_seconds": 12.0,
+    "knee_seconds": 60.0
+  },
+  "engine": {
+    "block_hash_function": "sha256_cbor",
+    "cuda_available": false,
+    "python": "3.11.1",
+    "pythonhashseed": "0",
+    "torch_version": "2.10.0+cu128",
+    "vllm_version": "0.27.1"
+  },
+  "generated_at_utc": "2026-11-16T07:35:29Z",
+  "label": "overhead A/B: delta-priced, family sweep",
+  "paired": {
+    "baseline_arm": "a0",
+    "comparisons": {
+      "asym_apc": {
+        "hit_rate_delta": 0.0,
+        "recomputed_token_delta": 0,
+        "recomputed_token_relative_change": 0.0
+      }
+    }
+  },
+  "schema": "kvopt.asym_apc.real_blockpool_campaign_cell.v1",
+  "scope": {
+    "gpu_executed": false,
+    "latency_is_model_based": true,
+    "measured_prefill_latency": false,
+    "real_vllm_block_pool": true,
+    "recomputed_tokens_are_measured": true
+  },
+  "selector": {
+    "loss_evaluation": "incremental"
+  },
+  "summaries": {
+    "a0": {
+      "arm": "a0",
+      "arm_spec": {
+        "cost_model": null,
+        "note": "Continuum Entry Release + native victim order",
+        "retains": true,
+        "weighting": null
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {},
+      "decisions": 0,
+      "evidence_missing_total": 0,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 0,
+      "mean_prefix_hit_rate": 0.7038761655978181,
+      "mean_recomputed_tokens": 143.2,
+      "median_recomputed_tokens": 0.0,
+      "modelled_prefill_ms_mean": 565.3911924965564,
+      "modelled_prefill_ms_total": 14700.17100491047,
+      "physically_evicted_blocks": 111,
+      "pressure_events": 18,
+      "pressure_events_with_protected_entries": 9,
+      "pressure_events_with_retention_entries": 17,
+      "protected_entries_at_pressure_max": 2,
+      "requests_completed": 40,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 8,
+      "selector_overhead_ms_total": null,
+      "selector_overhead_ns_max": null,
+      "selector_overhead_ns_mean": null,
+      "selector_overhead_ns_p50": null,
+      "selector_overhead_ns_p90": null,
+      "selector_overhead_ns_p95": null,
+      "total_prompt_tokens": 19440,
+      "total_recomputed_tokens": 5728,
+      "victim_set_divergence_count": 0,
+      "victim_set_divergence_rate": null,
+      "vs_a0_recomputed_delta": null,
+      "wall_seconds": 0.0654826009995304
+    },
+    "asym_apc": {
+      "arm": "asym_apc",
+      "arm_spec": {
+        "cost_model": "contiguous_prefix",
+        "note": "combined: contiguous-prefix cost + two-timescale recency",
+        "retains": true,
+        "weighting": "two_timescale"
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {
+        "baseline_no_verified_proxy_gain": 11,
+        "content_unverified": 7
+      },
+      "decisions": 18,
+      "evidence_missing_total": 881,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 18,
+      "mean_prefix_hit_rate": 0.7038761655978181,
+      "mean_recomputed_tokens": 143.2,
+      "median_recomputed_tokens": 0.0,
+      "modelled_prefill_ms_mean": 565.3911924965564,
+      "modelled_prefill_ms_total": 14700.17100491047,
+      "physically_evicted_blocks": 111,
+      "pressure_events": 18,
+      "pressure_events_with_protected_entries": 9,
+      "pressure_events_with_retention_entries": 17,
+      "protected_entries_at_pressure_max": 2,
+      "requests_completed": 40,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 8,
+      "selector_overhead_ms_total": 30.917657,
+      "selector_overhead_ns_max": 3062842,
+      "selector_overhead_ns_mean": 1717647.611111111,
+      "selector_overhead_ns_p50": 1556165.5,
+      "selector_overhead_ns_p90": 2587188.8000000003,
+      "selector_overhead_ns_p95": 2722306.4999999995,
+      "total_prompt_tokens": 19440,
+      "total_recomputed_tokens": 5728,
+      "victim_set_divergence_count": 0,
+      "victim_set_divergence_rate": 0.0,
+      "vs_a0_recomputed_delta": 0,
+      "wall_seconds": 0.09496398404007778
+    }
+  },
+  "workload": {
+    "block_tokens": 16,
+    "capacity_fraction": 0.85,
+    "family": {
+      "arrival": "shuffled",
+      "description": "35% of turns re-read an earlier depth instead of appending",
+      "family": "unpredictable_revisit",
+      "gap_choices": [
+        2.0,
+        90.0
+      ],
+      "gap_policy": "alternating",
+      "length_schedule": [
+        24,
+        32,
+        40,
+        40,
+        40
+      ],
+      "program_prefix_blocks": 12,
+      "programs": 8,
+      "regime_note": "non-append-only reuse",
+      "revisit_rate": 0.35,
+      "shared_prefix_blocks": 4,
+      "turns_per_program": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "zipf_s": 1.2
+    },
+    "family_name": "unpredictable_revisit",
+    "geometry_signature": "51dd33b3b5124d22",
+    "num_blocks": 248,
+    "program_prefix_blocks": 12,
+    "programs": 8,
+    "regime": "",
+    "seed": 20260301,
+    "shared_prefix_blocks": 4,
+    "total_requests": 40,
+    "ttl_seconds": 30.0,
+    "turns_per_program": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+    ],
+    "working_set_blocks": 292
+  }
+}

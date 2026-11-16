@@ -16,8 +16,12 @@ Every cell records `scope.gpu_executed: false`, `scope.latency_is_model_based: t
 | [`campaigns/exploratory2/`](campaigns/exploratory2) | 8 families × 2 capacity fractions × 4 arms, exploratory seed `20260101` |
 | [`campaigns/heldout/`](campaigns/heldout) | 8 families × 2 fractions × 3 held-out seeds × 4 arms (48 cells) |
 | [`campaigns/heldout-slow/`](campaigns/heldout-slow) | tuned decay re-checked on held-out seeds |
-| [`campaigns/overhead-p1/`](campaigns/overhead-p1) [`-p2`](campaigns/overhead-p2) | quiet-host overhead ladder, two passes |
+| [`campaigns/overhead-p1/`](campaigns/overhead-p1) [`-p2`](campaigns/overhead-p2) | quiet-host overhead ladder, two passes, full re-sum search |
+| [`campaigns/overhead-capacity-full/`](campaigns/overhead-capacity-full) [`-delta/`](campaigns/overhead-capacity-delta) | same 12-capacity sweep, full re-sum versus delta-priced search, run back to back |
+| [`campaigns/overhead-families-full/`](campaigns/overhead-families-full) [`-delta/`](campaigns/overhead-families-delta) | 8 families × 2 fractions, same two paths |
+| [`campaigns/overhead-cap192-full/`](campaigns/overhead-cap192-full) [`-delta/`](campaigns/overhead-cap192-delta) | the 192-block regime that was previously inconclusive |
 | [`analysis/`](analysis) | `cells.csv`, `family-arm-summary.csv`, `decisions-overhead.csv`, `overhead-strata.csv`, `overhead-scaling.csv`, `overhead-correlations.csv` per campaign |
+| [`analysis/overhead/`](analysis/overhead) | before/after decision-cost tables, and the decision-identity reports that show the two paths produced the same victims |
 | [`calibration/`](calibration) | the active profile, and the rejected wide-profile attempt (see report §11.4) |
 | [`MANIFEST.json`](MANIFEST.json) | per-campaign matrix, calibration SHA-256, and a SHA-256 for every file |
 
@@ -32,6 +36,22 @@ Every cell records `scope.gpu_executed: false`, `scope.latency_is_model_based: t
 
 `a0` and `native_lru` produce empty `decisions-*.jsonl` files because they do not select; that
 is a recorded absence, not a missing artifact.
+
+## Decision identity
+
+`analysis/overhead/identity-*.json` compares two campaigns row by row: every request line and
+every decision line (candidate counts, baseline and selected victim IDs, reason, proxy ms,
+missing-evidence counts) must match, with the measured `selector_overhead_ns` and the
+`loss_evaluation` label excluded. It also lists the overhead series behind the tables.
+
+Reproduce with:
+
+```bash
+python scripts/probes/asym_apc_native/compare_campaigns.py \
+  --baseline docs/experiments/asym-apc-independent-validation-artifacts/campaigns/overhead-capacity-full \
+  --candidate docs/experiments/asym-apc-independent-validation-artifacts/campaigns/overhead-capacity-delta \
+  --out /tmp/identity.json
+```
 
 ## Why cells are grouped by campaign
 
@@ -65,3 +85,6 @@ PY
   there by construction.
 * `depth_only` and `asym_apc` share the same evidence and candidate sets; only the weight
   differs. Any difference between them is the recency term's contribution.
+* Every campaign produced before the delta-priced search exists is still the full re-sum
+  result; campaigns whose name ends in `-full` or `-delta` state which path produced them in
+  `selector.loss_evaluation` inside each cell's `summary.json`.

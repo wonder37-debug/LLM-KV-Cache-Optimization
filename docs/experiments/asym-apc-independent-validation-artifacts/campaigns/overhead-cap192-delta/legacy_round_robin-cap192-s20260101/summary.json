@@ -1,0 +1,210 @@
+{
+  "arms": {
+    "executed": [
+      "a0",
+      "asym_apc"
+    ],
+    "specs": {
+      "a0": {
+        "cost_model": null,
+        "note": "Continuum Entry Release + native victim order",
+        "retains": true,
+        "weighting": null
+      },
+      "asym_apc": {
+        "cost_model": "contiguous_prefix",
+        "note": "combined: contiguous-prefix cost + two-timescale recency",
+        "retains": true,
+        "weighting": "two_timescale"
+      }
+    }
+  },
+  "calibration": {
+    "accepted_sources": [
+      "cpu_device_measured"
+    ],
+    "measurement_source": "cpu_device_measured",
+    "profile_path": "/workspace/repo-git/docs/experiments/asym-apc-native-evaluation-artifacts/calibration/cpu-device-prefill-v1.json",
+    "profile_sha256": "6266f3fe1a923dd14b0b05811c0978e564f52f566927bd7942486bf29c364e78"
+  },
+  "cell_wall_seconds": 6.1591145700076595,
+  "decay": {
+    "alpha_seconds": 60.0,
+    "beta_seconds": 12.0,
+    "knee_seconds": 60.0
+  },
+  "engine": {
+    "block_hash_function": "sha256_cbor",
+    "cuda_available": false,
+    "python": "3.11.1",
+    "pythonhashseed": "0",
+    "torch_version": "2.10.0+cu128",
+    "vllm_version": "0.27.1"
+  },
+  "generated_at_utc": "2026-11-16T07:37:03Z",
+  "label": "overhead A/B at 192 blocks: incremental",
+  "paired": {
+    "baseline_arm": "a0",
+    "comparisons": {
+      "asym_apc": {
+        "hit_rate_delta": 0.017187499999999994,
+        "recomputed_token_delta": -352,
+        "recomputed_token_relative_change": -0.01877133105802048
+      }
+    }
+  },
+  "schema": "kvopt.asym_apc.real_blockpool_campaign_cell.v1",
+  "scope": {
+    "gpu_executed": false,
+    "latency_is_model_based": true,
+    "measured_prefill_latency": false,
+    "real_vllm_block_pool": true,
+    "recomputed_tokens_are_measured": true
+  },
+  "selector": {
+    "loss_evaluation": "incremental"
+  },
+  "summaries": {
+    "a0": {
+      "arm": "a0",
+      "arm_spec": {
+        "cost_model": null,
+        "note": "Continuum Entry Release + native victim order",
+        "retains": true,
+        "weighting": null
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {},
+      "decisions": 0,
+      "evidence_missing_total": 0,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 0,
+      "mean_prefix_hit_rate": 0.17666666666666667,
+      "mean_recomputed_tokens": 468.8,
+      "median_recomputed_tokens": 576.0,
+      "modelled_prefill_ms_mean": 1452.3949420050485,
+      "modelled_prefill_ms_total": 58095.79768020194,
+      "physically_evicted_blocks": 981,
+      "pressure_events": 40,
+      "pressure_events_with_protected_entries": 23,
+      "pressure_events_with_retention_entries": 39,
+      "protected_entries_at_pressure_max": 8,
+      "requests_completed": 40,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 8,
+      "selector_overhead_ms_total": null,
+      "selector_overhead_ns_max": null,
+      "selector_overhead_ns_mean": null,
+      "selector_overhead_ns_p50": null,
+      "selector_overhead_ns_p90": null,
+      "selector_overhead_ns_p95": null,
+      "total_prompt_tokens": 22528,
+      "total_recomputed_tokens": 18752,
+      "victim_set_divergence_count": 0,
+      "victim_set_divergence_rate": null,
+      "vs_a0_recomputed_delta": null,
+      "wall_seconds": 5.839212337043136
+    },
+    "asym_apc": {
+      "arm": "asym_apc",
+      "arm_spec": {
+        "cost_model": "contiguous_prefix",
+        "note": "combined: contiguous-prefix cost + two-timescale recency",
+        "retains": true,
+        "weighting": "two_timescale"
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {
+        "baseline_no_verified_proxy_gain": 11,
+        "selected_lower_proxy_loss": 29
+      },
+      "decisions": 40,
+      "evidence_missing_total": 0,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 40,
+      "mean_prefix_hit_rate": 0.19385416666666666,
+      "mean_recomputed_tokens": 460.0,
+      "median_recomputed_tokens": 576.0,
+      "modelled_prefill_ms_mean": 1424.5314096597817,
+      "modelled_prefill_ms_total": 56981.25638639127,
+      "physically_evicted_blocks": 959,
+      "pressure_events": 40,
+      "pressure_events_with_protected_entries": 23,
+      "pressure_events_with_retention_entries": 39,
+      "protected_entries_at_pressure_max": 8,
+      "requests_completed": 40,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 8,
+      "selector_overhead_ms_total": 133.022434,
+      "selector_overhead_ns_max": 7261076,
+      "selector_overhead_ns_mean": 3325560.85,
+      "selector_overhead_ns_p50": 2110301.5,
+      "selector_overhead_ns_p90": 6841967.8,
+      "selector_overhead_ns_p95": 6935897.3,
+      "total_prompt_tokens": 22528,
+      "total_recomputed_tokens": 18400,
+      "victim_set_divergence_count": 29,
+      "victim_set_divergence_rate": 0.725,
+      "vs_a0_recomputed_delta": -352,
+      "wall_seconds": 0.31788151297951117
+    }
+  },
+  "workload": {
+    "block_tokens": 16,
+    "capacity_fraction": null,
+    "family": {
+      "arrival": "round_robin",
+      "description": "8 programs x 5 append-only turns, strict round-robin arrival",
+      "family": "legacy_round_robin",
+      "gap_choices": [
+        2.0,
+        90.0
+      ],
+      "gap_policy": "alternating",
+      "length_schedule": [
+        24,
+        32,
+        40,
+        40,
+        40
+      ],
+      "program_prefix_blocks": 12,
+      "programs": 8,
+      "regime_note": "reference shape",
+      "revisit_rate": 0.0,
+      "shared_prefix_blocks": 4,
+      "turns_per_program": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "zipf_s": 1.2
+    },
+    "family_name": "legacy_round_robin",
+    "geometry_signature": "917615474e770c32",
+    "num_blocks": 192,
+    "program_prefix_blocks": 12,
+    "programs": 8,
+    "regime": "",
+    "seed": 20260101,
+    "shared_prefix_blocks": 4,
+    "total_requests": 40,
+    "ttl_seconds": 30.0,
+    "turns_per_program": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+    ],
+    "working_set_blocks": 292
+  }
+}
