@@ -1,0 +1,4 @@
+arm,stratum,decisions,p50_ns,p90_ns,max_ns,mean_ns
+depth_only,greedy,320,5972526,28858664,58481306,9795755.4
+recency_only,greedy,320,1520776,3146123,5549448,1948989.8
+asym_apc,greedy,320,7012366,49583906,67112088,13755650.8

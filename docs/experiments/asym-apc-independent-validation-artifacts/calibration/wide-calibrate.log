@@ -1,0 +1,57 @@
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights:   0%|          | 1/290 [00:01<08:52,  1.84s/it]Loading weights:  14%|█▍        | 41/290 [00:02<00:09, 25.49it/s]Loading weights:  18%|█▊        | 52/290 [00:02<00:08, 27.77it/s]Loading weights:  22%|██▏       | 64/290 [00:02<00:07, 32.25it/s]Loading weights:  27%|██▋       | 77/290 [00:02<00:06, 35.17it/s]Loading weights:  31%|███       | 89/290 [00:03<00:05, 36.53it/s]Loading weights:  34%|███▍      | 100/290 [00:03<00:05, 37.81it/s]Loading weights:  39%|███▉      | 113/290 [00:03<00:04, 43.03it/s]Loading weights:  47%|████▋     | 136/290 [00:04<00:02, 54.97it/s]Loading weights:  51%|█████▏    | 149/290 [00:04<00:02, 51.99it/s]Loading weights:  56%|█████▌    | 161/290 [00:04<00:02, 50.18it/s]Loading weights:  60%|█████▉    | 173/290 [00:04<00:02, 49.61it/s]Loading weights:  63%|██████▎   | 184/290 [00:05<00:02, 48.51it/s]Loading weights:  70%|███████   | 203/290 [00:05<00:01, 56.24it/s]Loading weights:  72%|███████▏  | 209/290 [00:05<00:01, 44.22it/s]Loading weights:  87%|████████▋ | 251/290 [00:05<00:00, 72.64it/s]Loading weights:  89%|████████▉ | 259/290 [00:06<00:00, 59.89it/s]Loading weights:  93%|█████████▎| 269/290 [00:06<00:00, 52.79it/s]Loading weights: 100%|██████████| 290/290 [00:06<00:00, 44.45it/s]
+[calibrate] m=  256 r=    0 median= 1124.84ms p90= 1365.57ms spread=0.254
+[calibrate] m=  256 r=  128 median=  572.55ms p90=  662.33ms spread=0.231
+[calibrate] m=  256 r=  256 median=    0.00ms p90=    0.00ms spread=0.000
+[calibrate] m=  384 r=    0 median= 1498.69ms p90= 1551.50ms spread=0.085
+[calibrate] m=  384 r=  128 median= 1047.32ms p90= 1093.03ms spread=0.074
+[calibrate] m=  384 r=  256 median=  551.44ms p90=  575.84ms spread=0.077
+[calibrate] m=  384 r=  384 median=    0.00ms p90=    0.00ms spread=0.000
+[calibrate] m=  512 r=    0 median= 1899.07ms p90= 1906.60ms spread=0.011
+[calibrate] m=  512 r=  128 median= 1508.47ms p90= 1522.88ms spread=0.013
+[calibrate] m=  512 r=  256 median= 1016.21ms p90= 1081.72ms spread=0.070
+[calibrate] m=  512 r=  384 median=  539.89ms p90=  564.49ms spread=0.224
+[calibrate] m=  512 r=  512 median=    0.00ms p90=    0.00ms spread=0.000
+[calibrate] m=  640 r=    0 median= 1979.49ms p90= 2107.88ms spread=0.097
+[calibrate] m=  640 r=  128 median= 1640.94ms p90= 1696.11ms spread=0.063
+[calibrate] m=  640 r=  256 median= 1238.00ms p90= 1297.80ms spread=0.050
+[calibrate] m=  640 r=  384 median=  818.71ms p90=  839.29ms spread=0.047
+[calibrate] m=  640 r=  512 median=  456.32ms p90=  460.83ms spread=0.014
+[calibrate] m=  640 r=  640 median=    0.00ms p90=    0.00ms spread=0.000
+[calibrate] m=  768 r=    0 median= 2356.25ms p90= 2363.59ms spread=0.005
+[calibrate] m=  768 r=  128 median= 1981.14ms p90= 1985.79ms spread=0.004
+[calibrate] m=  768 r=  256 median= 1602.74ms p90= 1620.68ms spread=0.016
+[calibrate] m=  768 r=  384 median= 1202.68ms p90= 1248.95ms spread=0.069
+[calibrate] m=  768 r=  512 median=  816.51ms p90=  824.08ms spread=0.015
+[calibrate] m=  768 r=  640 median=  453.45ms p90=  488.15ms spread=0.080
+[calibrate] m=  768 r=  768 median=    0.00ms p90=    0.00ms spread=0.000
+[calibrate] m= 1024 r=    0 median= 3158.91ms p90= 3213.73ms spread=0.021
+[calibrate] m= 1024 r=  128 median= 2855.34ms p90= 2860.11ms spread=0.004
+[calibrate] m= 1024 r=  256 median= 2439.64ms p90= 2479.57ms spread=0.023
+[calibrate] m= 1024 r=  384 median= 2073.67ms p90= 2082.13ms spread=0.009
+[calibrate] m= 1024 r=  512 median= 1662.80ms p90= 1675.76ms spread=0.023
+[calibrate] m= 1024 r=  640 median= 1198.93ms p90= 1201.99ms spread=0.005
+[calibrate] m= 1024 r=  768 median=  836.39ms p90=  849.52ms spread=0.026
+[calibrate] m= 1024 r= 1024 median=    0.00ms p90=    0.00ms spread=0.000
+[calibrate] m= 1280 r=    0 median= 3933.44ms p90= 3946.03ms spread=0.013
+[calibrate] m= 1280 r=  128 median= 3741.27ms p90= 3750.65ms spread=0.007
+[calibrate] m= 1280 r=  256 median= 3319.87ms p90= 3329.07ms spread=0.008
+[calibrate] m= 1280 r=  384 median= 2886.59ms p90= 2927.34ms spread=0.032
+[calibrate] m= 1280 r=  512 median= 2493.34ms p90= 2545.17ms spread=0.034
+[calibrate] m= 1280 r=  640 median= 2077.88ms p90= 2172.68ms spread=0.069
+[calibrate] m= 1280 r=  768 median= 1603.40ms p90= 1620.46ms spread=0.015
+[calibrate] m= 1280 r= 1024 median=  862.75ms p90=  869.52ms spread=0.022
+[calibrate] m= 1280 r= 1280 median=    0.00ms p90=    0.00ms spread=0.000
+{
+  "written": "/workspace/realrun2/calibration/cpu-device-prefill-wide-v1.json",
+  "measurement_source": "cpu_device_measured",
+  "all_monotonic": true,
+  "resolvable": {
+    "16": false,
+    "24": false,
+    "32": false,
+    "40": false,
+    "48": false,
+    "64": false,
+    "80": false
+  }
+}

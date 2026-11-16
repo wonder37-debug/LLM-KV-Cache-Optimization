@@ -1,0 +1,318 @@
+{
+  "arms": {
+    "executed": [
+      "a0",
+      "depth_only",
+      "recency_only",
+      "asym_apc"
+    ],
+    "specs": {
+      "a0": {
+        "cost_model": null,
+        "note": "Continuum Entry Release + native victim order",
+        "retains": true,
+        "weighting": null
+      },
+      "asym_apc": {
+        "cost_model": "contiguous_prefix",
+        "note": "combined: contiguous-prefix cost + two-timescale recency",
+        "retains": true,
+        "weighting": "two_timescale"
+      },
+      "depth_only": {
+        "cost_model": "contiguous_prefix",
+        "note": "position-sensitive cost, no recency weighting",
+        "retains": true,
+        "weighting": "uniform"
+      },
+      "recency_only": {
+        "cost_model": "independent_block",
+        "note": "two-timescale recency, position-insensitive marginal cost",
+        "retains": true,
+        "weighting": "two_timescale"
+      }
+    }
+  },
+  "calibration": {
+    "accepted_sources": [
+      "cpu_device_measured"
+    ],
+    "measurement_source": "cpu_device_measured",
+    "profile_path": "/workspace/repo-git/docs/experiments/asym-apc-native-evaluation-artifacts/calibration/cpu-device-prefill-v1.json",
+    "profile_sha256": "6266f3fe1a923dd14b0b05811c0978e564f52f566927bd7942486bf29c364e78"
+  },
+  "cell_wall_seconds": 0.8336766720749438,
+  "decay": {
+    "alpha_seconds": 60.0,
+    "beta_seconds": 12.0,
+    "knee_seconds": 60.0
+  },
+  "engine": {
+    "block_hash_function": "sha256_cbor",
+    "cuda_available": false,
+    "python": "3.11.1",
+    "pythonhashseed": "0",
+    "torch_version": "2.10.0+cu128",
+    "vllm_version": "0.27.1"
+  },
+  "generated_at_utc": "2026-11-16T03:33:35Z",
+  "label": "heldout",
+  "paired": {
+    "baseline_arm": "a0",
+    "comparisons": {
+      "asym_apc": {
+        "hit_rate_delta": 0.04166666666666663,
+        "recomputed_token_delta": -640,
+        "recomputed_token_relative_change": -0.11764705882352941
+      },
+      "depth_only": {
+        "hit_rate_delta": 0.046666666666666745,
+        "recomputed_token_delta": -768,
+        "recomputed_token_relative_change": -0.1411764705882353
+      },
+      "recency_only": {
+        "hit_rate_delta": 0.016666666666666607,
+        "recomputed_token_delta": -256,
+        "recomputed_token_relative_change": -0.047058823529411764
+      }
+    }
+  },
+  "schema": "kvopt.asym_apc.real_blockpool_campaign_cell.v1",
+  "scope": {
+    "gpu_executed": false,
+    "latency_is_model_based": true,
+    "measured_prefill_latency": false,
+    "real_vllm_block_pool": true,
+    "recomputed_tokens_are_measured": true
+  },
+  "summaries": {
+    "a0": {
+      "arm": "a0",
+      "arm_spec": {
+        "cost_model": null,
+        "note": "Continuum Entry Release + native victim order",
+        "retains": true,
+        "weighting": null
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {},
+      "decisions": 0,
+      "evidence_missing_total": 0,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 0,
+      "mean_prefix_hit_rate": 0.715126165597818,
+      "mean_recomputed_tokens": 136.0,
+      "median_recomputed_tokens": 0.0,
+      "modelled_prefill_ms_mean": 530.004079227626,
+      "modelled_prefill_ms_total": 13780.106059918278,
+      "physically_evicted_blocks": 64,
+      "pressure_events": 17,
+      "pressure_events_with_protected_entries": 8,
+      "pressure_events_with_retention_entries": 16,
+      "protected_entries_at_pressure_max": 2,
+      "requests_completed": 40,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 8,
+      "selector_overhead_ms_total": null,
+      "selector_overhead_ns_max": null,
+      "selector_overhead_ns_mean": null,
+      "selector_overhead_ns_p50": null,
+      "selector_overhead_ns_p90": null,
+      "selector_overhead_ns_p95": null,
+      "total_prompt_tokens": 19440,
+      "total_recomputed_tokens": 5440,
+      "victim_set_divergence_count": 0,
+      "victim_set_divergence_rate": null,
+      "vs_a0_recomputed_delta": null,
+      "wall_seconds": 0.07163476478308439
+    },
+    "asym_apc": {
+      "arm": "asym_apc",
+      "arm_spec": {
+        "cost_model": "contiguous_prefix",
+        "note": "combined: contiguous-prefix cost + two-timescale recency",
+        "retains": true,
+        "weighting": "two_timescale"
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {
+        "baseline_no_verified_proxy_gain": 13,
+        "selected_partial_coverage": 2
+      },
+      "decisions": 15,
+      "evidence_missing_total": 620,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 15,
+      "mean_prefix_hit_rate": 0.7567928322644847,
+      "mean_recomputed_tokens": 120.0,
+      "median_recomputed_tokens": 0.0,
+      "modelled_prefill_ms_mean": 453.28481189426384,
+      "modelled_prefill_ms_total": 11785.40510925086,
+      "physically_evicted_blocks": 24,
+      "pressure_events": 15,
+      "pressure_events_with_protected_entries": 6,
+      "pressure_events_with_retention_entries": 14,
+      "protected_entries_at_pressure_max": 2,
+      "requests_completed": 40,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 8,
+      "selector_overhead_ms_total": 204.220202,
+      "selector_overhead_ns_max": 36816689,
+      "selector_overhead_ns_mean": 13614680.133333333,
+      "selector_overhead_ns_p50": 11033086.0,
+      "selector_overhead_ns_p90": 28621650.599999994,
+      "selector_overhead_ns_p95": 35894689.6,
+      "total_prompt_tokens": 19440,
+      "total_recomputed_tokens": 4800,
+      "victim_set_divergence_count": 2,
+      "victim_set_divergence_rate": 0.13333333333333333,
+      "vs_a0_recomputed_delta": -640,
+      "wall_seconds": 0.28932908084243536
+    },
+    "depth_only": {
+      "arm": "depth_only",
+      "arm_spec": {
+        "cost_model": "contiguous_prefix",
+        "note": "position-sensitive cost, no recency weighting",
+        "retains": true,
+        "weighting": "uniform"
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {
+        "baseline_no_verified_proxy_gain": 13,
+        "selected_partial_coverage": 2
+      },
+      "decisions": 15,
+      "evidence_missing_total": 620,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 15,
+      "mean_prefix_hit_rate": 0.7617928322644848,
+      "mean_recomputed_tokens": 116.8,
+      "median_recomputed_tokens": 0.0,
+      "modelled_prefill_ms_mean": 439.76781066465685,
+      "modelled_prefill_ms_total": 11433.963077281078,
+      "physically_evicted_blocks": 16,
+      "pressure_events": 15,
+      "pressure_events_with_protected_entries": 6,
+      "pressure_events_with_retention_entries": 14,
+      "protected_entries_at_pressure_max": 2,
+      "requests_completed": 40,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 8,
+      "selector_overhead_ms_total": 180.159279,
+      "selector_overhead_ns_max": 32651996,
+      "selector_overhead_ns_mean": 12010618.6,
+      "selector_overhead_ns_p50": 10136016.0,
+      "selector_overhead_ns_p90": 18015159.8,
+      "selector_overhead_ns_p95": 22541562.099999987,
+      "total_prompt_tokens": 19440,
+      "total_recomputed_tokens": 4672,
+      "victim_set_divergence_count": 2,
+      "victim_set_divergence_rate": 0.13333333333333333,
+      "vs_a0_recomputed_delta": -768,
+      "wall_seconds": 0.27001956989988685
+    },
+    "recency_only": {
+      "arm": "recency_only",
+      "arm_spec": {
+        "cost_model": "independent_block",
+        "note": "two-timescale recency, position-insensitive marginal cost",
+        "retains": true,
+        "weighting": "two_timescale"
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {
+        "baseline_no_verified_proxy_gain": 13,
+        "content_unverified": 2,
+        "selected_partial_coverage": 2
+      },
+      "decisions": 17,
+      "evidence_missing_total": 814,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 17,
+      "mean_prefix_hit_rate": 0.7317928322644847,
+      "mean_recomputed_tokens": 129.6,
+      "median_recomputed_tokens": 0.0,
+      "modelled_prefill_ms_mean": 501.1663292789308,
+      "modelled_prefill_ms_total": 13030.3245612522,
+      "physically_evicted_blocks": 48,
+      "pressure_events": 17,
+      "pressure_events_with_protected_entries": 8,
+      "pressure_events_with_retention_entries": 16,
+      "protected_entries_at_pressure_max": 2,
+      "requests_completed": 40,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 8,
+      "selector_overhead_ms_total": 109.366883,
+      "selector_overhead_ns_max": 24142545,
+      "selector_overhead_ns_mean": 6433346.05882353,
+      "selector_overhead_ns_p50": 4415305.0,
+      "selector_overhead_ns_p90": 12786984.600000001,
+      "selector_overhead_ns_p95": 17937032.999999993,
+      "total_prompt_tokens": 19440,
+      "total_recomputed_tokens": 5184,
+      "victim_set_divergence_count": 2,
+      "victim_set_divergence_rate": 0.11764705882352941,
+      "vs_a0_recomputed_delta": -256,
+      "wall_seconds": 0.19965097028762102
+    }
+  },
+  "workload": {
+    "block_tokens": 16,
+    "capacity_fraction": 0.95,
+    "family": {
+      "arrival": "shuffled",
+      "description": "35% of turns re-read an earlier depth instead of appending",
+      "family": "unpredictable_revisit",
+      "gap_choices": [
+        2.0,
+        90.0
+      ],
+      "gap_policy": "alternating",
+      "length_schedule": [
+        24,
+        32,
+        40,
+        40,
+        40
+      ],
+      "program_prefix_blocks": 12,
+      "programs": 8,
+      "regime_note": "non-append-only reuse",
+      "revisit_rate": 0.35,
+      "shared_prefix_blocks": 4,
+      "turns_per_program": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "zipf_s": 1.2
+    },
+    "family_name": "unpredictable_revisit",
+    "geometry_signature": "51dd33b3b5124d22",
+    "num_blocks": 277,
+    "program_prefix_blocks": 12,
+    "programs": 8,
+    "regime": "heldout",
+    "seed": 20260301,
+    "shared_prefix_blocks": 4,
+    "total_requests": 40,
+    "ttl_seconds": 30.0,
+    "turns_per_program": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+    ],
+    "working_set_blocks": 292
+  }
+}

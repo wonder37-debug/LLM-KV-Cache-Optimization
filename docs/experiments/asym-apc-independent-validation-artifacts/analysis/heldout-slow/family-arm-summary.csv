@@ -1,0 +1,7 @@
+family,arm,cells,mean_recomputed_tokens,mean_delta_vs_a0,mean_rel_change_vs_a0,cells_better,cells_equal,cells_worse,mean_overhead_ns_p50
+legacy_round_robin,a0,6,15232.0,,,0,0,0,
+legacy_round_robin,depth_only,6,10224.0,-5008.0,-0.331597,6,0,0,8082768.0
+legacy_round_robin,asym_apc,6,10928.0,-4304.0,-0.287946,6,0,0,8538290.7
+tool_gap_mix,a0,6,15232.0,,,0,0,0,
+tool_gap_mix,depth_only,6,9349.33,-5882.67,-0.386326,6,0,0,11969711.0
+tool_gap_mix,asym_apc,6,11904.0,-3328.0,-0.227927,6,0,0,10874377.4

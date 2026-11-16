@@ -1,0 +1,13 @@
+arm,dimension,bucket_low,bucket_high,decisions,p50_ns,p90_ns,max_ns
+asym_apc,legal_candidate_count,0,32,13,1019880,1754544,1970895
+asym_apc,legal_candidate_count,33,64,78,3738639,6448444,8686698
+asym_apc,legal_candidate_count,65,96,29,2900577,14484666,16914533
+asym_apc,legal_candidate_count,97,128,44,15457014,24124552,36023083
+asym_apc,legal_candidate_count,129,192,79,5083926,32809136,49231988
+asym_apc,legal_candidate_count,193,,205,10588988,55463209,74019735
+asym_apc,required_blocks,0,8,169,8758377,11713477,17309438
+asym_apc,required_blocks,9,16,23,11068752,20941683,25636154
+asym_apc,required_blocks,17,24,119,3517541,15264429,43268726
+asym_apc,required_blocks,25,32,37,24536933,51441086,51825906
+asym_apc,required_blocks,33,1000,100,18502943,63632164,74019735
+asym_apc,observed_chains,0,4,448,6716074,35067040,74019735

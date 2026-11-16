@@ -336,6 +336,10 @@ class AsymAPCDecision:
     audit: AsymAPCAudit
     selector_overhead_seconds: float
     execution_context: Mapping[str, object] = field(default_factory=dict)
+    # Monotonic high-resolution measurement of the same call. Kept separate
+    # from the timestamp clock so that a coarse or synthetic clock can never
+    # masquerade as a decision-cost measurement.
+    selector_overhead_ns: int = 0
 
     @property
     def reason_category(self) -> str:
@@ -367,6 +371,7 @@ class AsymAPCDecision:
             "exact_search": self.audit.exact_search,
             "evidence_missing_reason_counts": dict(self.audit.missing_reasons),
             "selector_overhead_seconds": self.selector_overhead_seconds,
+            "selector_overhead_ns": self.selector_overhead_ns,
             "claim_boundary": (
                 "contiguous-APC proxy loss difference under a calibrated cost curve; "
                 "not an expected recomputed-token count or measured latency"
@@ -390,11 +395,13 @@ class InstrumentedAsymAPCCoordinator:
         clock: Callable[[], float] = time.perf_counter,
         decision_prefix: str = "asym-apc",
         context_provider: Callable[[], Mapping[str, object]] | None = None,
+        time_ns: Callable[[], int] = time.perf_counter_ns,
     ) -> None:
         if not callable(getattr(coordinator, "select_victims", None)):
             raise TypeError("coordinator must provide select_victims")
         self._coordinator = coordinator
         self._clock = clock
+        self._time_ns = time_ns
         self._prefix = decision_prefix
         self._context_provider = context_provider
         self._sequence = 0
@@ -419,6 +426,7 @@ class InstrumentedAsymAPCCoordinator:
         decision_id = f"{self._prefix}-{self._sequence}"
         legal_count = len(preparation.virtual_eligible_order)
         started = self._clock()
+        started_ns = self._time_ns()
         selected = self._coordinator.select_victims(
             candidates,
             preparation,
@@ -426,12 +434,15 @@ class InstrumentedAsymAPCCoordinator:
             required_blocks=required_blocks,
             timestamp=timestamp,
         )
+        elapsed_ns = self._time_ns() - started_ns
         elapsed = self._clock() - started
         audit = self._coordinator.last_audit
         if audit is None:
             raise RuntimeError("coordinator returned without an audit record")
         if not math.isfinite(elapsed) or elapsed < 0:
             raise RuntimeError("selector overhead measurement is invalid")
+        if isinstance(elapsed_ns, bool) or not isinstance(elapsed_ns, int) or elapsed_ns < 0:
+            raise RuntimeError("selector nanosecond overhead measurement is invalid")
         decision = AsymAPCDecision(
             decision_id=decision_id,
             timestamp=float(timestamp),
@@ -440,6 +451,7 @@ class InstrumentedAsymAPCCoordinator:
             legal_candidate_count=legal_count,
             audit=audit,
             selector_overhead_seconds=float(elapsed),
+            selector_overhead_ns=int(elapsed_ns),
             execution_context=(
                 dict(self._context_provider()) if self._context_provider is not None else {}
             ),
@@ -741,6 +753,8 @@ def build_asym_apc_arm(
     context_provider: Callable[[], Mapping[str, object]] | None = None,
     clock: Callable[[], float] = time.perf_counter,
     allowed_sources: Sequence[str] = DEFAULT_ALLOWED_MEASUREMENT_SOURCES,
+    cost_model: str = "contiguous_prefix",
+    weighting: str = "two_timescale",
 ) -> tuple[InstrumentedAsymAPCCoordinator, AsymAPCProfile, PhysicalEvictionReconciler]:
     """Build the gated arm, refusing to start without a measured profile."""
     profile = load_calibration_profile(
@@ -757,6 +771,8 @@ def build_asym_apc_arm(
         max_greedy_operations=config.max_greedy_operations,
         min_proxy_gain_ms=config.min_proxy_gain_ms,
         clock_domain=config.clock_domain,
+        cost_model=cost_model,
+        weighting=weighting,
     )
     instrumented = InstrumentedAsymAPCCoordinator(
         coordinator,

@@ -57,6 +57,13 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
+# The probe directory holds the workload-family definitions; tests load this
+# file by path, so the directory has to be importable on its own.
+_PROBE_DIR = Path(__file__).resolve().parent
+if str(_PROBE_DIR) not in sys.path:
+    sys.path.insert(0, str(_PROBE_DIR))
+
+import workload_families  # noqa: E402
 
 BLOCK_TOKENS = 16
 HASH_FN_NAME = "sha256_cbor"
@@ -377,6 +384,56 @@ def retention_entry(
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True, slots=True)
+class ArmSpec:
+    """What one experimental arm is allowed to differ in.
+
+    ``retains`` controls whether the Continuum Entry lifecycle is maintained at
+    all. Every arm that retains must maintain it identically; otherwise the
+    comparison stops being about victim selection. ``cost_model`` and
+    ``weighting`` are the only ablation knobs.
+    """
+
+    name: str
+    retains: bool
+    cost_model: str | None = None
+    weighting: str | None = None
+    note: str = ""
+
+    @property
+    def selects(self) -> bool:
+        return self.cost_model is not None
+
+
+ARM_SPECS: dict[str, ArmSpec] = {
+    "native_lru": ArmSpec("native_lru", False, note="unmodified BlockPool allocator"),
+    "a0": ArmSpec("a0", True, note="Continuum Entry Release + native victim order"),
+    "depth_only": ArmSpec(
+        "depth_only",
+        True,
+        "contiguous_prefix",
+        "uniform",
+        note="position-sensitive cost, no recency weighting",
+    ),
+    "recency_only": ArmSpec(
+        "recency_only",
+        True,
+        "independent_block",
+        "two_timescale",
+        note="two-timescale recency, position-insensitive marginal cost",
+    ),
+    "asym_apc": ArmSpec(
+        "asym_apc",
+        True,
+        "contiguous_prefix",
+        "two_timescale",
+        note="combined: contiguous-prefix cost + two-timescale recency",
+    ),
+}
+
+DEFAULT_ARMS = ("native_lru", "a0", "asym_apc")
+
+
 @dataclass
 class ArmResult:
     arm: str
@@ -400,6 +457,9 @@ def run_arm(
     profile_sha: str,
     allowed_sources: tuple[str, ...],
     proxy_gain_ms: float,
+    decay_alpha: float = 60.0,
+    decay_beta: float = 12.0,
+    decay_knee: float = 60.0,
 ) -> ArmResult:
     from kvopt.continuum.retention import RetentionManager
     from kvopt.costaware.a2_native import A2NativeChainSnapshot, A2NativeSnapshotRegistry
@@ -427,19 +487,20 @@ def run_arm(
     )
     # Both controlled arms must observe and maintain the same Retention Entry
     # lifecycle. Otherwise A0 is merely Native LRU with an empty entry table.
+    spec = ARM_SPECS[arm]
     registry: A2NativeSnapshotRegistry | None = (
-        A2NativeSnapshotRegistry() if arm in {"a0", "asym_apc"} else None
+        A2NativeSnapshotRegistry() if spec.retains else None
     )
     arm_coordinator = None
-    if arm == "asym_apc":
+    if spec.selects:
         config = parse_policy_config(
             {
                 "enabled": True,
                 "profile_path": str(profile_path),
                 "profile_sha256": profile_sha,
-                "alpha_seconds": 60.0,
-                "beta_seconds": 12.0,
-                "knee_seconds": 60.0,
+                "alpha_seconds": decay_alpha,
+                "beta_seconds": decay_beta,
+                "knee_seconds": decay_knee,
                 "tau_seconds": 30.0,
                 "max_exact_subsets": 12,
                 "max_greedy_operations": 200000,
@@ -452,10 +513,17 @@ def run_arm(
         arm_coordinator, profile, _reconciler = build_asym_apc_arm(
             registry=registry,
             config=config,
+            cost_model=str(spec.cost_model),
+            weighting=str(spec.weighting),
             # Decision CPU overhead must be measured with the real clock,
             # not the synthetic workload clock that is constant during selection.
             clock=time.perf_counter,
             allowed_sources=allowed_sources,
+            # Chain count is recorded per decision so overhead can be analysed
+            # against the structure the selector actually walked.
+            context_provider=lambda: {
+                "observed_chains": len(getattr(registry, "_chains", {})),
+            },
         )
     deadlines: dict[str, float] = {}
 
@@ -489,7 +557,7 @@ def run_arm(
             )
 
     integration: RetentionRuntimeIntegration | None = None
-    if arm in {"a0", "asym_apc"}:
+    if spec.retains:
         integration = RetentionRuntimeIntegration(
             manager,
             block_selection_coordinator=arm_coordinator,
@@ -550,7 +618,7 @@ def run_arm(
             substrate.release(hit_ids)
             continue
 
-        if arm == "native_lru":
+        if not spec.retains:
             new_ids = substrate.allocate(needed)
         else:
             # Every allocation is routed through the selector.
@@ -643,6 +711,16 @@ def summarise(result: ArmResult, *, measurement_source: str) -> dict[str, object
     divergent = [
         decision for decision in result.decisions if decision.get("victim_set_differs")
     ]
+    overheads_ns = [
+        int(decision["selector_overhead_ns"])
+        for decision in result.decisions
+        if isinstance(decision.get("selector_overhead_ns"), int)
+    ]
+    exact = sum(1 for decision in result.decisions if decision.get("exact_search"))
+    missing_total = sum(
+        sum(int(v) for v in dict(decision.get("evidence_missing_reason_counts") or {}).values())
+        for decision in result.decisions
+    )
     reasons: dict[str, int] = {}
     for decision in result.decisions:
         reason = str(decision.get("reason") or "unknown")
@@ -675,7 +753,37 @@ def summarise(result: ArmResult, *, measurement_source: str) -> dict[str, object
             len(divergent) / len(result.decisions) if result.decisions else None
         ),
         "cost_model_source": measurement_source if modelled else None,
+        # Decision CPU cost, measured with a monotonic nanosecond clock around
+        # the selector call only. Never combined with modelled prefill latency.
+        "selector_overhead_ns_p50": _percentile(overheads_ns, 50),
+        "selector_overhead_ns_p90": _percentile(overheads_ns, 90),
+        "selector_overhead_ns_p95": _percentile(overheads_ns, 95),
+        "selector_overhead_ns_max": max(overheads_ns) if overheads_ns else None,
+        "selector_overhead_ns_mean": (
+            statistics.fmean(overheads_ns) if overheads_ns else None
+        ),
+        "selector_overhead_ms_total": (
+            sum(overheads_ns) / 1e6 if overheads_ns else None
+        ),
+        "exact_search_decisions": exact,
+        "greedy_search_decisions": len(result.decisions) - exact,
+        "evidence_missing_total": missing_total,
+        "vs_a0_recomputed_delta": None,
     }
+
+
+def _percentile(values: list[int], pct: int) -> float | None:
+    """Linear-interpolated percentile; returns None for an empty sample."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return float(ordered[0])
+    rank = (len(ordered) - 1) * (pct / 100.0)
+    low = int(rank)
+    high = min(low + 1, len(ordered) - 1)
+    frac = rank - low
+    return float(ordered[low]) + (ordered[high] - ordered[low]) * frac
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -697,12 +805,30 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--long-gap", type=float, default=90.0)
     parser.add_argument("--ttl", type=float, default=30.0)
     parser.add_argument("--min-proxy-gain-ms", type=float, default=0.0)
+    parser.add_argument("--decay-alpha", type=float, default=60.0)
+    parser.add_argument("--decay-beta", type=float, default=12.0)
+    parser.add_argument("--decay-knee", type=float, default=60.0)
     parser.add_argument(
         "--target-blocks",
         default="24,32,40,40,40",
         help="prompt length in blocks for successive turns of one program",
     )
     parser.add_argument("--seed", type=int, default=20260101)
+    parser.add_argument(
+        "--workload-family",
+        default="legacy",
+        help="legacy, or one of " + ",".join(workload_families.family_names()),
+    )
+    parser.add_argument(
+        "--arms",
+        default=",".join(DEFAULT_ARMS),
+        help="comma-separated subset of " + ",".join(ARM_SPECS),
+    )
+    parser.add_argument(
+        "--regime",
+        default="",
+        help="informational pressure-regime label recorded with the run",
+    )
     parser.add_argument("--out-dir", required=True)
     args = parser.parse_args(argv)
 
@@ -723,23 +849,49 @@ def main(argv: list[str] | None = None) -> int:
     if sha != actual_sha:
         raise SystemExit(f"profile SHA-256 mismatch: argument {sha} != file {actual_sha}")
 
-    workload = WorkloadSpec(
-        programs=args.programs,
-        turns_per_program=args.turns_per_program,
-        shared_prefix_blocks=args.shared_prefix_blocks,
-        program_prefix_blocks=args.program_prefix_blocks,
-        short_gap_seconds=args.short_gap,
-        long_gap_seconds=args.long_gap,
-        seed=args.seed,
-        target_blocks=tuple(int(v) for v in args.target_blocks.split(",")),
-    )
-    turns = workload.build()
+    if args.workload_family == "legacy":
+        workload = WorkloadSpec(
+            programs=args.programs,
+            turns_per_program=args.turns_per_program,
+            shared_prefix_blocks=args.shared_prefix_blocks,
+            program_prefix_blocks=args.program_prefix_blocks,
+            short_gap_seconds=args.short_gap,
+            long_gap_seconds=args.long_gap,
+            seed=args.seed,
+            target_blocks=tuple(int(v) for v in args.target_blocks.split(",")),
+        )
+        turns = workload.build()
+        family_record: dict[str, object] = {
+            "family": "legacy",
+            "description": "explicit WorkloadSpec from CLI flags",
+            "programs": args.programs,
+            "turns_per_program": args.turns_per_program,
+            "shared_prefix_blocks": args.shared_prefix_blocks,
+            "program_prefix_blocks": args.program_prefix_blocks,
+            "length_schedule": [int(v) for v in args.target_blocks.split(",")],
+            "gap_choices": [args.short_gap, args.long_gap],
+            "gap_policy": "alternating",
+            "arrival": "round_robin",
+            "revisit_rate": 0.0,
+        }
+    else:
+        if args.workload_family not in workload_families.FAMILIES:
+            raise SystemExit(f"unknown workload family: {args.workload_family}")
+        family_spec = workload_families.FAMILIES[args.workload_family]
+        turns = workload_families.build_turns(family_spec, args.seed)
+        family_record = workload_families.describe(family_spec)
+
+    arms = tuple(name.strip() for name in args.arms.split(",") if name.strip())
+    unknown = [name for name in arms if name not in ARM_SPECS]
+    if unknown:
+        raise SystemExit(f"unknown arms: {unknown}")
+    geometry = workload_families.geometry_signature(turns)
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summaries: dict[str, dict[str, object]] = {}
-    for arm in ("native_lru", "a0", "asym_apc"):
+    for arm in arms:
         started = time.perf_counter()
         result = run_arm(
             arm,
@@ -750,6 +902,9 @@ def main(argv: list[str] | None = None) -> int:
             profile_sha=sha,
             allowed_sources=allowed,
             proxy_gain_ms=args.min_proxy_gain_ms,
+            decay_alpha=args.decay_alpha,
+            decay_beta=args.decay_beta,
+            decay_knee=args.decay_knee,
         )
         elapsed = time.perf_counter() - started
         summary = summarise(result, measurement_source=measurement_source)
@@ -764,41 +919,57 @@ def main(argv: list[str] | None = None) -> int:
                 handle.write(json.dumps(row, sort_keys=True) + "\n")
         print(json.dumps(summary, indent=2, sort_keys=True), flush=True)
 
-    paired = {
-        "arm_a": "a0",
-        "arm_b": "asym_apc",
-        "recomputed_token_delta": (
-            summaries["asym_apc"]["total_recomputed_tokens"]
-            - summaries["a0"]["total_recomputed_tokens"]
-        ),
-        "recomputed_token_relative_change": (
-            (
-                summaries["asym_apc"]["total_recomputed_tokens"]
-                - summaries["a0"]["total_recomputed_tokens"]
-            )
-            / summaries["a0"]["total_recomputed_tokens"]
-            if summaries["a0"]["total_recomputed_tokens"]
+    # Deltas are computed against the controlled A0 arm, which now carries the
+    # same Retention Entry lifecycle as every selecting arm. An arm that is not
+    # present is recorded as absent instead of being silently replaced by zero.
+    baseline = summaries.get("a0")
+    paired: dict[str, object] = {"baseline_arm": "a0", "comparisons": {}}
+    for arm, summary in summaries.items():
+        if baseline is None or arm == "a0":
+            continue
+        if arm == "native_lru":
+            continue
+        token_delta = (
+            summary["total_recomputed_tokens"] - baseline["total_recomputed_tokens"]
+        )
+        relative = (
+            token_delta / baseline["total_recomputed_tokens"]
+            if baseline["total_recomputed_tokens"]
             else None
-        ),
-        "hit_rate_delta": (
-            summaries["asym_apc"]["mean_prefix_hit_rate"]
-            - summaries["a0"]["mean_prefix_hit_rate"]
-        ),
-        "native_vs_a0_recomputed_delta": (
-            summaries["a0"]["total_recomputed_tokens"]
+        )
+        summary["vs_a0_recomputed_delta"] = token_delta
+        paired["comparisons"][arm] = {
+            "recomputed_token_delta": token_delta,
+            "recomputed_token_relative_change": relative,
+            "hit_rate_delta": (
+                summary["mean_prefix_hit_rate"] - baseline["mean_prefix_hit_rate"]
+            ),
+        }
+    if "native_lru" in summaries and baseline is not None:
+        paired["native_vs_a0_recomputed_delta"] = (
+            baseline["total_recomputed_tokens"]
             - summaries["native_lru"]["total_recomputed_tokens"]
-        ),
-    }
+        )
+    else:
+        paired["native_vs_a0_recomputed_delta"] = None
 
     payload = {
         "schema": "kvopt.asym_apc.real_blockpool_evaluation.v1",
         "generated_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "engine": _engine_identity(),
         "workload": {
-            "programs": args.programs,
-            "turns_per_program": args.turns_per_program,
-            "shared_prefix_blocks": args.shared_prefix_blocks,
-            "program_prefix_blocks": args.program_prefix_blocks,
+            "family": family_record,
+            "family_name": str(family_record.get("family")),
+            "geometry_signature": geometry,
+            "regime": args.regime,
+            "programs": family_record.get("programs", args.programs),
+            "turns_per_program": family_record.get("turns_per_program", args.turns_per_program),
+            "shared_prefix_blocks": family_record.get(
+                "shared_prefix_blocks", args.shared_prefix_blocks
+            ),
+            "program_prefix_blocks": family_record.get(
+                "program_prefix_blocks", args.program_prefix_blocks
+            ),
             "short_gap_seconds": args.short_gap,
             "long_gap_seconds": args.long_gap,
             "ttl_seconds": args.ttl,
@@ -806,6 +977,23 @@ def main(argv: list[str] | None = None) -> int:
             "block_tokens": BLOCK_TOKENS,
             "seed": args.seed,
             "total_requests": len(turns),
+        },
+        "decay": {
+            "alpha_seconds": args.decay_alpha,
+            "beta_seconds": args.decay_beta,
+            "knee_seconds": args.decay_knee,
+        },
+        "arms": {
+            "executed": list(arms),
+            "specs": {
+                name: {
+                    "retains": ARM_SPECS[name].retains,
+                    "cost_model": ARM_SPECS[name].cost_model,
+                    "weighting": ARM_SPECS[name].weighting,
+                    "note": ARM_SPECS[name].note,
+                }
+                for name in arms
+            },
         },
         "calibration": {
             "profile_path": str(profile_path),

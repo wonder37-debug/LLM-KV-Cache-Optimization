@@ -1,0 +1,320 @@
+{
+  "arms": {
+    "executed": [
+      "a0",
+      "depth_only",
+      "recency_only",
+      "asym_apc"
+    ],
+    "specs": {
+      "a0": {
+        "cost_model": null,
+        "note": "Continuum Entry Release + native victim order",
+        "retains": true,
+        "weighting": null
+      },
+      "asym_apc": {
+        "cost_model": "contiguous_prefix",
+        "note": "combined: contiguous-prefix cost + two-timescale recency",
+        "retains": true,
+        "weighting": "two_timescale"
+      },
+      "depth_only": {
+        "cost_model": "contiguous_prefix",
+        "note": "position-sensitive cost, no recency weighting",
+        "retains": true,
+        "weighting": "uniform"
+      },
+      "recency_only": {
+        "cost_model": "independent_block",
+        "note": "two-timescale recency, position-insensitive marginal cost",
+        "retains": true,
+        "weighting": "two_timescale"
+      }
+    }
+  },
+  "calibration": {
+    "accepted_sources": [
+      "cpu_device_measured"
+    ],
+    "measurement_source": "cpu_device_measured",
+    "profile_path": "/workspace/repo-git/docs/experiments/asym-apc-native-evaluation-artifacts/calibration/cpu-device-prefill-v1.json",
+    "profile_sha256": "6266f3fe1a923dd14b0b05811c0978e564f52f566927bd7942486bf29c364e78"
+  },
+  "cell_wall_seconds": 0.8322762530297041,
+  "decay": {
+    "alpha_seconds": 60.0,
+    "beta_seconds": 12.0,
+    "knee_seconds": 60.0
+  },
+  "engine": {
+    "block_hash_function": "sha256_cbor",
+    "cuda_available": false,
+    "python": "3.11.1",
+    "pythonhashseed": "0",
+    "torch_version": "2.10.0+cu128",
+    "vllm_version": "0.27.1"
+  },
+  "generated_at_utc": "2026-11-16T03:31:06Z",
+  "label": "exploratory",
+  "paired": {
+    "baseline_arm": "a0",
+    "comparisons": {
+      "asym_apc": {
+        "hit_rate_delta": 0.012500000000000067,
+        "recomputed_token_delta": -320,
+        "recomputed_token_relative_change": -0.05154639175257732
+      },
+      "depth_only": {
+        "hit_rate_delta": 0.012500000000000067,
+        "recomputed_token_delta": -320,
+        "recomputed_token_relative_change": -0.05154639175257732
+      },
+      "recency_only": {
+        "hit_rate_delta": 0.0012500000000000844,
+        "recomputed_token_delta": -32,
+        "recomputed_token_relative_change": -0.005154639175257732
+      }
+    }
+  },
+  "schema": "kvopt.asym_apc.real_blockpool_campaign_cell.v1",
+  "scope": {
+    "gpu_executed": false,
+    "latency_is_model_based": true,
+    "measured_prefill_latency": false,
+    "real_vllm_block_pool": true,
+    "recomputed_tokens_are_measured": true
+  },
+  "summaries": {
+    "a0": {
+      "arm": "a0",
+      "arm_spec": {
+        "cost_model": null,
+        "note": "Continuum Entry Release + native victim order",
+        "retains": true,
+        "weighting": null
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {},
+      "decisions": 0,
+      "evidence_missing_total": 0,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 0,
+      "mean_prefix_hit_rate": 0.725,
+      "mean_recomputed_tokens": 155.2,
+      "median_recomputed_tokens": 0.0,
+      "modelled_prefill_ms_mean": 488.43107342836447,
+      "modelled_prefill_ms_total": 19537.24293713458,
+      "physically_evicted_blocks": 112,
+      "pressure_events": 18,
+      "pressure_events_with_protected_entries": 12,
+      "pressure_events_with_retention_entries": 17,
+      "protected_entries_at_pressure_max": 5,
+      "requests_completed": 40,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 8,
+      "selector_overhead_ms_total": null,
+      "selector_overhead_ns_max": null,
+      "selector_overhead_ns_mean": null,
+      "selector_overhead_ns_p50": null,
+      "selector_overhead_ns_p90": null,
+      "selector_overhead_ns_p95": null,
+      "total_prompt_tokens": 22528,
+      "total_recomputed_tokens": 6208,
+      "victim_set_divergence_count": 0,
+      "victim_set_divergence_rate": null,
+      "vs_a0_recomputed_delta": null,
+      "wall_seconds": 0.07982966490089893
+    },
+    "asym_apc": {
+      "arm": "asym_apc",
+      "arm_spec": {
+        "cost_model": "contiguous_prefix",
+        "note": "combined: contiguous-prefix cost + two-timescale recency",
+        "retains": true,
+        "weighting": "two_timescale"
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {
+        "baseline_no_verified_proxy_gain": 13,
+        "content_unverified": 4,
+        "selected_partial_coverage": 1
+      },
+      "decisions": 18,
+      "evidence_missing_total": 280,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 18,
+      "mean_prefix_hit_rate": 0.7375,
+      "mean_recomputed_tokens": 147.2,
+      "median_recomputed_tokens": 0.0,
+      "modelled_prefill_ms_mean": 464.46172750293044,
+      "modelled_prefill_ms_total": 18578.469100117218,
+      "physically_evicted_blocks": 92,
+      "pressure_events": 18,
+      "pressure_events_with_protected_entries": 12,
+      "pressure_events_with_retention_entries": 17,
+      "protected_entries_at_pressure_max": 5,
+      "requests_completed": 40,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 8,
+      "selector_overhead_ms_total": 197.297975,
+      "selector_overhead_ns_max": 44646412,
+      "selector_overhead_ns_mean": 10960998.611111112,
+      "selector_overhead_ns_p50": 7023265.0,
+      "selector_overhead_ns_p90": 31936515.90000001,
+      "selector_overhead_ns_p95": 41103459.849999994,
+      "total_prompt_tokens": 22528,
+      "total_recomputed_tokens": 5888,
+      "victim_set_divergence_count": 1,
+      "victim_set_divergence_rate": 0.05555555555555555,
+      "vs_a0_recomputed_delta": -320,
+      "wall_seconds": 0.2743341410532594
+    },
+    "depth_only": {
+      "arm": "depth_only",
+      "arm_spec": {
+        "cost_model": "contiguous_prefix",
+        "note": "position-sensitive cost, no recency weighting",
+        "retains": true,
+        "weighting": "uniform"
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {
+        "baseline_no_verified_proxy_gain": 13,
+        "content_unverified": 4,
+        "selected_partial_coverage": 1
+      },
+      "decisions": 18,
+      "evidence_missing_total": 280,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 18,
+      "mean_prefix_hit_rate": 0.7375,
+      "mean_recomputed_tokens": 147.2,
+      "median_recomputed_tokens": 0.0,
+      "modelled_prefill_ms_mean": 464.46172750293044,
+      "modelled_prefill_ms_total": 18578.469100117218,
+      "physically_evicted_blocks": 92,
+      "pressure_events": 18,
+      "pressure_events_with_protected_entries": 12,
+      "pressure_events_with_retention_entries": 17,
+      "protected_entries_at_pressure_max": 5,
+      "requests_completed": 40,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 8,
+      "selector_overhead_ms_total": 206.262734,
+      "selector_overhead_ns_max": 45127897,
+      "selector_overhead_ns_mean": 11459040.777777778,
+      "selector_overhead_ns_p50": 7076912.0,
+      "selector_overhead_ns_p90": 32219789.20000001,
+      "selector_overhead_ns_p95": 41833542.64999999,
+      "total_prompt_tokens": 22528,
+      "total_recomputed_tokens": 5888,
+      "victim_set_divergence_count": 1,
+      "victim_set_divergence_rate": 0.05555555555555555,
+      "vs_a0_recomputed_delta": -320,
+      "wall_seconds": 0.28575379913672805
+    },
+    "recency_only": {
+      "arm": "recency_only",
+      "arm_spec": {
+        "cost_model": "independent_block",
+        "note": "two-timescale recency, position-insensitive marginal cost",
+        "retains": true,
+        "weighting": "two_timescale"
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {
+        "baseline_no_verified_proxy_gain": 13,
+        "content_unverified": 4,
+        "selected_partial_coverage": 1
+      },
+      "decisions": 18,
+      "evidence_missing_total": 298,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 18,
+      "mean_prefix_hit_rate": 0.7262500000000001,
+      "mean_recomputed_tokens": 154.4,
+      "median_recomputed_tokens": 0.0,
+      "modelled_prefill_ms_mean": 486.0495522036217,
+      "modelled_prefill_ms_total": 19441.98208814487,
+      "physically_evicted_blocks": 110,
+      "pressure_events": 18,
+      "pressure_events_with_protected_entries": 12,
+      "pressure_events_with_retention_entries": 17,
+      "protected_entries_at_pressure_max": 5,
+      "requests_completed": 40,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 8,
+      "selector_overhead_ms_total": 109.032516,
+      "selector_overhead_ns_max": 40879025,
+      "selector_overhead_ns_mean": 6057362.0,
+      "selector_overhead_ns_p50": 2876955.5,
+      "selector_overhead_ns_p90": 11574300.600000003,
+      "selector_overhead_ns_p95": 18163549.34999996,
+      "total_prompt_tokens": 22528,
+      "total_recomputed_tokens": 6176,
+      "victim_set_divergence_count": 1,
+      "victim_set_divergence_rate": 0.05555555555555555,
+      "vs_a0_recomputed_delta": -32,
+      "wall_seconds": 0.18948391592130065
+    }
+  },
+  "workload": {
+    "block_tokens": 16,
+    "capacity_fraction": 0.95,
+    "family": {
+      "arrival": "shuffled",
+      "description": "legacy shape, arrival order permuted per seed",
+      "family": "agent_random_arrival",
+      "gap_choices": [
+        2.0,
+        90.0
+      ],
+      "gap_policy": "alternating",
+      "length_schedule": [
+        24,
+        32,
+        40,
+        40,
+        40
+      ],
+      "program_prefix_blocks": 12,
+      "programs": 8,
+      "regime_note": "arrival-order sensitivity",
+      "revisit_rate": 0.0,
+      "shared_prefix_blocks": 4,
+      "turns_per_program": [
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5,
+        5
+      ],
+      "zipf_s": 1.2
+    },
+    "family_name": "agent_random_arrival",
+    "geometry_signature": "313478fc569cba24",
+    "num_blocks": 277,
+    "program_prefix_blocks": 12,
+    "programs": 8,
+    "regime": "exploratory",
+    "seed": 20260101,
+    "shared_prefix_blocks": 4,
+    "total_requests": 40,
+    "ttl_seconds": 30.0,
+    "turns_per_program": [
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
+    ],
+    "working_set_blocks": 292
+  }
+}

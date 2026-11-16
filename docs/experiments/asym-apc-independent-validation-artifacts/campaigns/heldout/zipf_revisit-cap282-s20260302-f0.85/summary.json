@@ -1,0 +1,322 @@
+{
+  "arms": {
+    "executed": [
+      "a0",
+      "depth_only",
+      "recency_only",
+      "asym_apc"
+    ],
+    "specs": {
+      "a0": {
+        "cost_model": null,
+        "note": "Continuum Entry Release + native victim order",
+        "retains": true,
+        "weighting": null
+      },
+      "asym_apc": {
+        "cost_model": "contiguous_prefix",
+        "note": "combined: contiguous-prefix cost + two-timescale recency",
+        "retains": true,
+        "weighting": "two_timescale"
+      },
+      "depth_only": {
+        "cost_model": "contiguous_prefix",
+        "note": "position-sensitive cost, no recency weighting",
+        "retains": true,
+        "weighting": "uniform"
+      },
+      "recency_only": {
+        "cost_model": "independent_block",
+        "note": "two-timescale recency, position-insensitive marginal cost",
+        "retains": true,
+        "weighting": "two_timescale"
+      }
+    }
+  },
+  "calibration": {
+    "accepted_sources": [
+      "cpu_device_measured"
+    ],
+    "measurement_source": "cpu_device_measured",
+    "profile_path": "/workspace/repo-git/docs/experiments/asym-apc-native-evaluation-artifacts/calibration/cpu-device-prefill-v1.json",
+    "profile_sha256": "6266f3fe1a923dd14b0b05811c0978e564f52f566927bd7942486bf29c364e78"
+  },
+  "cell_wall_seconds": 1.3613335541449487,
+  "decay": {
+    "alpha_seconds": 60.0,
+    "beta_seconds": 12.0,
+    "knee_seconds": 60.0
+  },
+  "engine": {
+    "block_hash_function": "sha256_cbor",
+    "cuda_available": false,
+    "python": "3.11.1",
+    "pythonhashseed": "0",
+    "torch_version": "2.10.0+cu128",
+    "vllm_version": "0.27.1"
+  },
+  "generated_at_utc": "2026-11-16T03:33:29Z",
+  "label": "heldout",
+  "paired": {
+    "baseline_arm": "a0",
+    "comparisons": {
+      "asym_apc": {
+        "hit_rate_delta": 0.0,
+        "recomputed_token_delta": 0,
+        "recomputed_token_relative_change": 0.0
+      },
+      "depth_only": {
+        "hit_rate_delta": 0.0,
+        "recomputed_token_delta": 0,
+        "recomputed_token_relative_change": 0.0
+      },
+      "recency_only": {
+        "hit_rate_delta": 0.0,
+        "recomputed_token_delta": 0,
+        "recomputed_token_relative_change": 0.0
+      }
+    }
+  },
+  "schema": "kvopt.asym_apc.real_blockpool_campaign_cell.v1",
+  "scope": {
+    "gpu_executed": false,
+    "latency_is_model_based": true,
+    "measured_prefill_latency": false,
+    "real_vllm_block_pool": true,
+    "recomputed_tokens_are_measured": true
+  },
+  "summaries": {
+    "a0": {
+      "arm": "a0",
+      "arm_spec": {
+        "cost_model": null,
+        "note": "Continuum Entry Release + native victim order",
+        "retains": true,
+        "weighting": null
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {},
+      "decisions": 0,
+      "evidence_missing_total": 0,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 0,
+      "mean_prefix_hit_rate": 0.635,
+      "mean_recomputed_tokens": 160.9142857142857,
+      "median_recomputed_tokens": 128,
+      "modelled_prefill_ms_mean": 524.2572974266728,
+      "modelled_prefill_ms_total": 18349.00540993355,
+      "physically_evicted_blocks": 71,
+      "pressure_events": 26,
+      "pressure_events_with_protected_entries": 16,
+      "pressure_events_with_retention_entries": 25,
+      "protected_entries_at_pressure_max": 4,
+      "requests_completed": 35,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 10,
+      "selector_overhead_ms_total": null,
+      "selector_overhead_ns_max": null,
+      "selector_overhead_ns_mean": null,
+      "selector_overhead_ns_p50": null,
+      "selector_overhead_ns_p90": null,
+      "selector_overhead_ns_p95": null,
+      "total_prompt_tokens": 18688,
+      "total_recomputed_tokens": 5632,
+      "victim_set_divergence_count": 0,
+      "victim_set_divergence_rate": null,
+      "vs_a0_recomputed_delta": null,
+      "wall_seconds": 0.11231011897325516
+    },
+    "asym_apc": {
+      "arm": "asym_apc",
+      "arm_spec": {
+        "cost_model": "contiguous_prefix",
+        "note": "combined: contiguous-prefix cost + two-timescale recency",
+        "retains": true,
+        "weighting": "two_timescale"
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {
+        "baseline_no_verified_proxy_gain": 21,
+        "selected_lower_proxy_loss": 5
+      },
+      "decisions": 26,
+      "evidence_missing_total": 0,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 26,
+      "mean_prefix_hit_rate": 0.635,
+      "mean_recomputed_tokens": 160.9142857142857,
+      "median_recomputed_tokens": 128,
+      "modelled_prefill_ms_mean": 524.2572974266728,
+      "modelled_prefill_ms_total": 18349.00540993355,
+      "physically_evicted_blocks": 71,
+      "pressure_events": 26,
+      "pressure_events_with_protected_entries": 16,
+      "pressure_events_with_retention_entries": 25,
+      "protected_entries_at_pressure_max": 4,
+      "requests_completed": 35,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 10,
+      "selector_overhead_ms_total": 362.972854,
+      "selector_overhead_ns_max": 68770319,
+      "selector_overhead_ns_mean": 13960494.384615384,
+      "selector_overhead_ns_p50": 11173305.5,
+      "selector_overhead_ns_p90": 24576123.0,
+      "selector_overhead_ns_p95": 30110072.5,
+      "total_prompt_tokens": 18688,
+      "total_recomputed_tokens": 5632,
+      "victim_set_divergence_count": 5,
+      "victim_set_divergence_rate": 0.19230769230769232,
+      "vs_a0_recomputed_delta": 0,
+      "wall_seconds": 0.5066649289801717
+    },
+    "depth_only": {
+      "arm": "depth_only",
+      "arm_spec": {
+        "cost_model": "contiguous_prefix",
+        "note": "position-sensitive cost, no recency weighting",
+        "retains": true,
+        "weighting": "uniform"
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {
+        "baseline_no_verified_proxy_gain": 22,
+        "selected_lower_proxy_loss": 4
+      },
+      "decisions": 26,
+      "evidence_missing_total": 0,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 26,
+      "mean_prefix_hit_rate": 0.635,
+      "mean_recomputed_tokens": 160.9142857142857,
+      "median_recomputed_tokens": 128,
+      "modelled_prefill_ms_mean": 524.2572974266728,
+      "modelled_prefill_ms_total": 18349.00540993355,
+      "physically_evicted_blocks": 71,
+      "pressure_events": 26,
+      "pressure_events_with_protected_entries": 16,
+      "pressure_events_with_retention_entries": 25,
+      "protected_entries_at_pressure_max": 4,
+      "requests_completed": 35,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 10,
+      "selector_overhead_ms_total": 364.158085,
+      "selector_overhead_ns_max": 81143933,
+      "selector_overhead_ns_mean": 14006080.192307692,
+      "selector_overhead_ns_p50": 11232161.0,
+      "selector_overhead_ns_p90": 20571324.0,
+      "selector_overhead_ns_p95": 24219561.0,
+      "total_prompt_tokens": 18688,
+      "total_recomputed_tokens": 5632,
+      "victim_set_divergence_count": 4,
+      "victim_set_divergence_rate": 0.15384615384615385,
+      "vs_a0_recomputed_delta": 0,
+      "wall_seconds": 0.49926441302523017
+    },
+    "recency_only": {
+      "arm": "recency_only",
+      "arm_spec": {
+        "cost_model": "independent_block",
+        "note": "two-timescale recency, position-insensitive marginal cost",
+        "retains": true,
+        "weighting": "two_timescale"
+      },
+      "cost_model_source": "cpu_device_measured",
+      "decision_reasons": {
+        "baseline_no_verified_proxy_gain": 21,
+        "content_unverified": 4,
+        "selected_lower_proxy_loss": 1
+      },
+      "decisions": 26,
+      "evidence_missing_total": 64,
+      "exact_search_decisions": 0,
+      "greedy_search_decisions": 26,
+      "mean_prefix_hit_rate": 0.635,
+      "mean_recomputed_tokens": 160.9142857142857,
+      "median_recomputed_tokens": 128,
+      "modelled_prefill_ms_mean": 524.2572974266728,
+      "modelled_prefill_ms_total": 18349.00540993355,
+      "physically_evicted_blocks": 71,
+      "pressure_events": 26,
+      "pressure_events_with_protected_entries": 16,
+      "pressure_events_with_retention_entries": 25,
+      "protected_entries_at_pressure_max": 4,
+      "requests_completed": 35,
+      "requests_stalled": 0,
+      "retention_entries_at_pressure_max": 10,
+      "selector_overhead_ms_total": 108.082709,
+      "selector_overhead_ns_max": 27315002,
+      "selector_overhead_ns_mean": 4157027.269230769,
+      "selector_overhead_ns_p50": 3301819.5,
+      "selector_overhead_ns_p90": 4707087.0,
+      "selector_overhead_ns_p95": 8593645.0,
+      "total_prompt_tokens": 18688,
+      "total_recomputed_tokens": 5632,
+      "victim_set_divergence_count": 1,
+      "victim_set_divergence_rate": 0.038461538461538464,
+      "vs_a0_recomputed_delta": 0,
+      "wall_seconds": 0.23967012111097574
+    }
+  },
+  "workload": {
+    "block_tokens": 16,
+    "capacity_fraction": 0.85,
+    "family": {
+      "arrival": "zipf",
+      "description": "Zipf-skewed program revisit frequency, 10 programs",
+      "family": "zipf_revisit",
+      "gap_choices": [
+        2.0,
+        90.0
+      ],
+      "gap_policy": "alternating",
+      "length_schedule": [
+        24,
+        32,
+        40,
+        40,
+        40
+      ],
+      "program_prefix_blocks": 12,
+      "programs": 10,
+      "regime_note": "skewed reuse",
+      "revisit_rate": 0.0,
+      "shared_prefix_blocks": 4,
+      "turns_per_program": [
+        6,
+        5,
+        5,
+        4,
+        4,
+        3,
+        3,
+        2,
+        2,
+        1
+      ],
+      "zipf_s": 1.4
+    },
+    "family_name": "zipf_revisit",
+    "geometry_signature": "1f5341089198adad",
+    "num_blocks": 282,
+    "program_prefix_blocks": 12,
+    "programs": 10,
+    "regime": "heldout",
+    "seed": 20260302,
+    "shared_prefix_blocks": 4,
+    "total_requests": 35,
+    "ttl_seconds": 30.0,
+    "turns_per_program": [
+      6,
+      5,
+      5,
+      4,
+      4,
+      3,
+      3,
+      2,
+      2,
+      1
+    ],
+    "working_set_blocks": 332
+  }
+}

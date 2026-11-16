@@ -27,6 +27,14 @@ def _finite_nonnegative(value: float, name: str) -> float:
     return val
 
 
+# Ablation surface. ``contiguous_prefix`` prices the *cascade* a victim set
+# causes (evicting block d truncates the chain at d-1). ``independent_block``
+# prices each victim on its own marginal depth cost and is position-insensitive,
+# which is the honest counterfactual for "does the contiguous structure matter".
+_COST_MODELS = frozenset({"contiguous_prefix", "independent_block"})
+_WEIGHTINGS = frozenset({"two_timescale", "uniform"})
+
+
 @dataclass(frozen=True, slots=True)
 class APCLatencyCurve:
     """Measured/simulated prefill milliseconds for (total blocks, cached depth).
@@ -74,7 +82,6 @@ class APCLatencyCurve:
 @dataclass(frozen=True, slots=True)
 class AsymDecay:
     """Two-timescale, AsymCache-inspired *ranking proxy*, not calibrated P(reuse)."""
-
     alpha_seconds: float = 60.0
     beta_seconds: float = 12.0
     knee_seconds: float = 60.0
@@ -133,6 +140,8 @@ class AsymAPCNativeCoordinator:
         max_greedy_operations: int = 50000,
         min_proxy_gain_ms: float = 1e-9,
         clock_domain: str = "system_monotonic",
+        cost_model: str = "contiguous_prefix",
+        weighting: str = "two_timescale",
     ) -> None:
         if not callable(getattr(registry, "build_request", None)):
             raise TypeError("registry needs A2NativeSnapshotRegistry.build_request")
@@ -140,6 +149,10 @@ class AsymAPCNativeCoordinator:
             raise ValueError("tau_seconds must be positive")
         if max_exact_subsets < 1 or max_greedy_operations < 1:
             raise ValueError("search limits must be positive")
+        if cost_model not in _COST_MODELS:
+            raise ValueError(f"cost_model must be one of {sorted(_COST_MODELS)}")
+        if weighting not in _WEIGHTINGS:
+            raise ValueError(f"weighting must be one of {sorted(_WEIGHTINGS)}")
         self._registry = registry
         self._curves = dict(curves_by_length)
         for length, curve in self._curves.items():
@@ -153,8 +166,20 @@ class AsymAPCNativeCoordinator:
         if not isinstance(clock_domain, str) or not clock_domain:
             raise ValueError("clock_domain must be nonempty")
         self._clock_domain = clock_domain
+        self._cost_model = cost_model
+        self._weighting = weighting
         self._last_access: dict[str, float] = {}
         self.last_audit: AsymAPCAudit | None = None
+
+    @property
+    def cost_model(self) -> str:
+        """Scoring variant: contiguous-prefix cascade or independent marginals."""
+        return self._cost_model
+
+    @property
+    def weighting(self) -> str:
+        """Recency weighting variant: two-timescale decay or uniform."""
+        return self._weighting
 
     @property
     def clock_domain(self) -> str:
@@ -321,15 +346,24 @@ class AsymAPCNativeCoordinator:
                         reason = "chain_length_mismatch"
                         break
                     when = access.get(m.chain)
-                    if when is None:
-                        when = self._observed_access_time(m.chain)
+                    if self._weighting != "uniform":
+                        # Only the recency-weighted variants consume time. The
+                        # uniform ablation must not be penalised for evidence it
+                        # does not use, or its coverage would differ for an
+                        # unrelated reason.
                         if when is None:
-                            reason = "recency_missing"
-                            break
-                        if when > timestamp:
-                            reason = "future_observation"
-                            break
-                        access[m.chain] = when
+                            when = self._observed_access_time(m.chain)
+                            if when is None:
+                                reason = "recency_missing"
+                                break
+                            if when > timestamp:
+                                reason = "future_observation"
+                                break
+                            access[m.chain] = when
+                    elif when is None:
+                        observed = self._observed_access_time(m.chain)
+                        if observed is not None and observed <= timestamp:
+                            access[m.chain] = observed
                     candidate_members.append((m.chain, m.depth))
             if reason is not None:
                 invalid[bid] = reason
@@ -359,9 +393,23 @@ class AsymAPCNativeCoordinator:
         # unrelated blocks elsewhere in the queue have no logical-chain proof.
         involved = {chain for bid in verified for chain, _ in memberships[bid]}
         base_cost = {c: curves[c].at(lengths[c]) for c in involved}
-        weights = {c: self._decay.weight(timestamp - access[c]) for c in involved}
+        if self._weighting == "uniform":
+            weights = {c: 1.0 for c in involved}
+        else:
+            weights = {c: self._decay.weight(timestamp - access[c]) for c in involved}
 
         def loss(ids: Sequence[int]) -> float:
+            if self._cost_model == "independent_block":
+                # Each victim is priced alone: the marginal prefill cost of
+                # losing that depth, with no credit for the suffix it truncates.
+                total = 0.0
+                for block_id in ids:
+                    for chain, depth in memberships[block_id]:
+                        curve = curves[chain]
+                        total += weights[chain] * max(
+                            0.0, curve.at(depth - 1) - curve.at(depth)
+                        )
+                return total
             prefixes = {c: lengths[c] for c in involved}
             for block_id in ids:
                 for chain, depth in memberships[block_id]:

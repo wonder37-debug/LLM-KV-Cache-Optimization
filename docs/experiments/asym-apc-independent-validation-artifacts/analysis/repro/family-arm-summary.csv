@@ -1,0 +1,4 @@
+family,arm,cells,mean_recomputed_tokens,mean_delta_vs_a0,mean_rel_change_vs_a0,cells_better,cells_equal,cells_worse,mean_overhead_ns_p50
+legacy_round_robin,native_lru,12,14272.0,0.0,0.0,0,12,0,
+legacy_round_robin,a0,12,14272.0,,,0,0,0,
+legacy_round_robin,asym_apc,12,11460.0,-2812.0,-0.194773,9,3,0,7343366.9

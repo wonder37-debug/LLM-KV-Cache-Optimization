@@ -1,0 +1,104 @@
+{
+  "calibration": {
+    "measurement_source": "cpu_device_measured",
+    "profile_path": "/workspace/repo-git/docs/experiments/asym-apc-native-evaluation-artifacts/calibration/cpu-device-prefill-v1.json",
+    "profile_sha256": "6266f3fe1a923dd14b0b05811c0978e564f52f566927bd7942486bf29c364e78"
+  },
+  "cells": [
+    {
+      "a0_tokens": 16576,
+      "capacity": 240,
+      "cell": "legacy_round_robin-cap240-s20260101",
+      "comparisons": {
+        "asym_apc": {
+          "hit_rate_delta": 0.03999999999999998,
+          "recomputed_token_delta": -1024,
+          "recomputed_token_relative_change": -0.06177606177606178
+        }
+      },
+      "family": "legacy_round_robin",
+      "geometry_signature": "917615474e770c32",
+      "seed": 20260101
+    },
+    {
+      "a0_tokens": 15680,
+      "capacity": 256,
+      "cell": "legacy_round_robin-cap256-s20260101",
+      "comparisons": {
+        "asym_apc": {
+          "hit_rate_delta": 0.06,
+          "recomputed_token_delta": -1536,
+          "recomputed_token_relative_change": -0.09795918367346938
+        }
+      },
+      "family": "legacy_round_robin",
+      "geometry_signature": "917615474e770c32",
+      "seed": 20260101
+    },
+    {
+      "a0_tokens": 14784,
+      "capacity": 272,
+      "cell": "legacy_round_robin-cap272-s20260101",
+      "comparisons": {
+        "asym_apc": {
+          "hit_rate_delta": 0.1737499999999999,
+          "recomputed_token_delta": -4448,
+          "recomputed_token_relative_change": -0.3008658008658009
+        }
+      },
+      "family": "legacy_round_robin",
+      "geometry_signature": "917615474e770c32",
+      "seed": 20260101
+    },
+    {
+      "a0_tokens": 13888,
+      "capacity": 288,
+      "cell": "legacy_round_robin-cap288-s20260101",
+      "comparisons": {
+        "asym_apc": {
+          "hit_rate_delta": 0.31,
+          "recomputed_token_delta": -7936,
+          "recomputed_token_relative_change": -0.5714285714285714
+        }
+      },
+      "family": "legacy_round_robin",
+      "geometry_signature": "917615474e770c32",
+      "seed": 20260101
+    }
+  ],
+  "engine": {
+    "block_hash_function": "sha256_cbor",
+    "cuda_available": false,
+    "python": "3.11.1",
+    "pythonhashseed": "0",
+    "torch_version": "2.10.0+cu128",
+    "vllm_version": "0.27.1"
+  },
+  "generated_at_utc": "2026-11-16T03:29:18Z",
+  "matrix": {
+    "arms": [
+      "a0",
+      "asym_apc"
+    ],
+    "capacities": [
+      240,
+      256,
+      272,
+      288
+    ],
+    "decay": {
+      "alpha_seconds": 60.0,
+      "beta_seconds": 12.0,
+      "knee_seconds": 60.0
+    },
+    "families": [
+      "legacy_round_robin"
+    ],
+    "label": "decay-current",
+    "seeds": [
+      20260101
+    ],
+    "ttl_seconds": 30.0
+  },
+  "schema": "kvopt.asym_apc.real_blockpool_campaign.v1"
+}
