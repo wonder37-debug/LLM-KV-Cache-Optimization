@@ -1,0 +1,111 @@
+{
+  "curves": [
+    {
+      "samples": [
+        {
+          "cached_blocks": 0,
+          "prefill_ms": 1214.3538529926445
+        },
+        {
+          "cached_blocks": 12,
+          "prefill_ms": 1398.1467770063318
+        },
+        {
+          "cached_blocks": 24,
+          "prefill_ms": 0.0
+        }
+      ],
+      "total_blocks": 24
+    }
+  ],
+  "measurement_source": "cpu_device_measured",
+  "points": [
+    {
+      "cached_blocks": 0,
+      "cached_tokens": 0,
+      "computed_tokens": 384,
+      "prefill_ms": 1214.3538529926445,
+      "prefill_ms_max": 1215.168326976709,
+      "prefill_ms_min": 1206.3237139955163,
+      "prefill_ms_p90": 1215.0054321798962,
+      "prompt_tokens": 384,
+      "relative_spread": 0.007149249094886716,
+      "repeats": 3,
+      "total_blocks": 24
+    },
+    {
+      "cached_blocks": 12,
+      "cached_tokens": 192,
+      "computed_tokens": 192,
+      "prefill_ms": 1398.1467770063318,
+      "prefill_ms_max": 1400.465067999903,
+      "prefill_ms_min": 1393.007584993029,
+      "prefill_ms_p90": 1400.0014098011889,
+      "prompt_tokens": 384,
+      "relative_spread": 0.005002210728643814,
+      "repeats": 3,
+      "total_blocks": 24
+    },
+    {
+      "cached_blocks": 24,
+      "cached_tokens": 384,
+      "computed_tokens": 0,
+      "prefill_ms": 0.0,
+      "prefill_ms_max": 0.0,
+      "prefill_ms_min": 0.0,
+      "prefill_ms_p90": 0.0,
+      "prompt_tokens": 384,
+      "relative_spread": 0.0,
+      "repeats": 3,
+      "total_blocks": 24
+    }
+  ],
+  "provenance": {
+    "attn_implementation": "sdpa",
+    "block_size": 16,
+    "device_note": "MEASURED ON CPU. No NVIDIA device exists on this host, so this profile must not be read as a GPU prefill measurement.",
+    "dtype": "float32",
+    "hardware": {
+      "cpu_count": 32,
+      "cpu_model": "AMD EPYC 9K65 192-Core Processor",
+      "device": "cpu",
+      "machine": "x86_64",
+      "memory_total_kib": 129308476,
+      "platform": "Linux-6.6.117-45.19.1.tl4.x86_64-x86_64-with-glibc2.39",
+      "processor": "x86_64"
+    },
+    "measured_at_utc": "2026-11-15T13:18:01Z",
+    "model_name": "Qwen/Qwen2.5-Coder-0.5B-Instruct",
+    "model_revision": "unknown",
+    "repeats": 3,
+    "runtime_mode": "transformers-prefill-probe",
+    "torch_threads": 4,
+    "torch_version": "2.10.0+cu128",
+    "vllm_version": "0.27.1",
+    "warmup": 1
+  },
+  "quality": {
+    "all_monotonic": false,
+    "per_length": [
+      {
+        "monotonic": false,
+        "ms_saved_per_cached_block_max": 116.51223141719431,
+        "ms_saved_per_cached_block_min": -15.316077001140608,
+        "noise_floor_ms": 8.68171818437986,
+        "prompt_tokens": 384,
+        "resolvable": false,
+        "total_blocks": 24,
+        "total_saving_ms": 1214.3538529926445,
+        "violations": [
+          {
+            "from_cached_blocks": 0,
+            "increase_ms": 183.7929240136873,
+            "noise_floor_ms": 8.68171818437986,
+            "to_cached_blocks": 12
+          }
+        ]
+      }
+    ]
+  },
+  "schema_version": "kvopt.asym_apc.prefill_calibration_profile.v1"
+}

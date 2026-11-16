@@ -1,0 +1,39 @@
+# Execution environment evidence (captured 2026-11-15, UTC)
+
+## Commands and raw output
+
+```
+$ nvidia-smi
+(eval):2: command not found: nvidia-smi
+
+$ ls /dev/nvidia*
+ls: cannot access '/dev/nvidia*': No such file or directory
+
+$ ls /proc/driver/nvidia
+ls: cannot access '/proc/driver/nvidia': No such file or directory
+
+$ python3 -c 'import torch; print(torch.__version__, torch.cuda.is_available(), torch.cuda.device_count())'
+2.10.0+cu128 False 0
+
+$ python3 -c 'import vllm'
+ModuleNotFoundError: No module named 'vllm'
+
+$ uname -a
+Linux 0eceec0ed1cb 6.6.117-45.19.1.tl4.x86_64 #1 SMP Sat Oct 31 14:42:03 CST 2026 x86_64 x86_64 x86_64 GNU/Linux
+
+$ grep -c ^processor /proc/cpuinfo
+32
+
+$ free -g
+               total        used        free      shared  buff/cache   available
+Mem:             123          29          26           0          67          93
+
+$ lspci | grep -i vga
+(no output)
+```
+
+## Interpretation
+
+No NVIDIA device node, driver interface, kernel module, PCI display device or nvidia-smi binary exists inside this
+execution sandbox, and vLLM is not installed. A CUDA context cannot be created, so no Native GPU Prefill
+calibration or serving run is possible here. No CPU mock was substituted for a GPU measurement.

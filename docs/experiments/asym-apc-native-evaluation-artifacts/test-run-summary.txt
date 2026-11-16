@@ -1,0 +1,30 @@
+# CPU verification evidence (captured 2026-11-15, UTC)
+
+Branch: experiment/asym-apc-native-gpu-arm
+Base: 3bb8549 (docs: record merged AsymAPC CPU evidence, synthetic sensitivity and artifact gaps)
+
+## Commands and result
+
+```
+$ python -m pytest tests -q
+# 3 failed, 2007 passed, 19 skipped in 52.92s
+
+# pre-existing environment failures (identical on main before this branch):
+FAILED tests/test_continuum_bounded_campaign.py::test_materialize_campaign_freezes_54_runs_and_cross_arm_time
+FAILED tests/test_continuum_bounded_campaign.py::test_validation_rejects_tampered_logical_sequence
+FAILED tests/test_continuum_logging.py::test_logging_module_import_has_no_runtime_side_effects
+
+$ python -m pytest tests/test_asym_apc_native_arm.py tests/test_asym_apc_campaign.py -q
+# 29 passed
+
+$ python -m pytest tests/test_asym_apc_native_arm.py tests/test_asym_apc_campaign.py tests/test_asym_apc_native.py tests/test_asym_apc_repo_integration.py tests/test_costaware_a2_native.py tests/test_continuum_vllm_retention_hook.py -q
+# 97 passed
+
+$ python scripts/probes/asym_apc_native/calibrate.py --dry-run --grid 4,8,12,16,20
+# prints the 65-point measurement plan (5 lengths, depths 0..m)
+```
+
+## Scope of this evidence
+
+CPU behavior, gating, audit, reconciliation arithmetic, campaign structure and report arithmetic only.
+No vLLM Native inference, no GPU Prefill measurement, no eviction observed on real hardware.

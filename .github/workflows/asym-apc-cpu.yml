@@ -22,7 +22,92 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install -e . pytest
-      - run: python -m pytest -q tests/test_asym_apc_native.py tests/test_asym_apc_repo_integration.py
+      - name: New Native arm, campaign, request-time accounting and probe fairness tests
+        run: |
+          python -m pytest -q \
+            tests/test_asym_apc_native_arm.py \
+            tests/test_asym_apc_campaign.py \
+            tests/test_asym_apc_real_blockpool_probe.py \
+            tests/test_asym_apc_native.py \
+            tests/test_asym_apc_repo_integration.py
       - run: python -m pytest -q tests/test_costaware_a2_native.py tests/test_costaware_a2_evidence.py tests/test_costaware_a2_contract.py tests/test_continuum_retention_integration.py tests/test_continuum_pressure.py tests/test_continuum_vllm_observation_runner.py
-      - run: python -m compileall -q src/kvopt scripts/spikes/phase2_minimal_observability_metal.py
+      - name: All self-contained repository CPU tests
+        run: |
+          python -m pytest -q tests --disable-warnings --tb=line \
+            --deselect=tests/test_continuum_bounded_campaign.py::test_materialize_campaign_freezes_54_runs_and_cross_arm_time \
+            --deselect=tests/test_continuum_bounded_campaign.py::test_validation_rejects_tampered_logical_sequence
+      - name: Compile Native implementation, calibration, probes and analysis
+        run: python -m compileall -q src/kvopt scripts/spikes/phase2_minimal_observability_metal.py scripts/probes/asym_apc_native
       - run: python scripts/probes/asym_apc_native/simulate.py --groups 160 --seed 20261115
+
+  cpu-vllm-blockpool:
+    name: Real vLLM 0.27.1 CPU BlockPool replay (experimental environment)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # Installation of the pinned upstream CPU wheel depends on release assets;
+    # its failure is preserved in job logs, not treated as a policy regression.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: astral-sh/setup-uv@v6
+      - name: Install official pinned vLLM 0.27.1 CPU wheel
+        run: |
+          uv pip install --system --torch-backend cpu             "https://github.com/vllm-project/vllm/releases/download/v0.27.1/vllm-0.27.1+cpu-cp38-abi3-manylinux_2_34_x86_64.whl"
+          uv pip install --system -e .
+      - name: Confirm vLLM CPU substrate
+        run: |
+          python - <<'PY'
+          import torch, vllm
+          from vllm.v1.core.block_pool import BlockPool
+          print('torch:', torch.__version__, 'cuda:', torch.cuda.is_available())
+          print('vllm:', vllm.__version__, 'BlockPool:', BlockPool.__module__)
+          assert not torch.cuda.is_available(), 'this job is CPU-only'
+          assert vllm.__version__ == '0.27.1'
+          PY
+      - name: Replay corrected A0 versus AsymAPC on actual BlockPool
+        env:
+          PYTHONHASHSEED: "0"
+          VLLM_TARGET_DEVICE: cpu
+          OMP_NUM_THREADS: "2"
+        run: |
+          PROFILE=docs/experiments/asym-apc-native-evaluation-artifacts/calibration/cpu-device-prefill-v1.json
+          SHA=6266f3fe1a923dd14b0b05811c0978e564f52f566927bd7942486bf29c364e78
+          for cap in 128 160 224 240 256 264 272 280 288 292 296 320; do
+            python scripts/probes/asym_apc_native/real_blockpool_eval.py \
+              --profile "$PROFILE" --profile-sha256 "$SHA" \
+              --allow-source cpu_device_measured \
+              --num-blocks "$cap" --programs 8 --turns-per-program 5 \
+              --seed 20260101 --out-dir "cpu-blockpool-results/cap${cap}" \
+              > "cpu-blockpool-${cap}.log"
+          done
+          python - <<'PY'
+          import json, pathlib
+          for f in sorted(pathlib.Path('cpu-blockpool-results').glob('cap*/summary.json')):
+              data=json.loads(f.read_text())
+              a0=data['summaries']['a0']
+              asym=data['summaries']['asym_apc']
+              a=a0['total_recomputed_tokens']
+              b=asym['total_recomputed_tokens']
+              print(f.parent.name, 'A0', a, 'ASYM_APC', b, 'delta', b-a,
+                    'A0_retention_events',a0['pressure_events_with_retention_entries'],
+                    'Asym_retention_events',asym['pressure_events_with_retention_entries'],
+                    'A0_protected_events',a0['pressure_events_with_protected_entries'],
+                    'Asym_protected_events',asym['pressure_events_with_protected_entries'],
+                    'GPU',data['scope']['gpu_executed'])
+              assert a0['pressure_events_with_retention_entries'] > 0
+              assert asym['pressure_events_with_retention_entries'] > 0
+              assert a0['pressure_events_with_protected_entries'] > 0
+              assert asym['pressure_events_with_protected_entries'] > 0
+              assert data['scope']['gpu_executed'] is False
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: asym-apc-corrected-real-vllm-cpu-blockpool
+          path: |
+            cpu-blockpool-results/
+            cpu-blockpool-*.log
+          if-no-files-found: ignore
