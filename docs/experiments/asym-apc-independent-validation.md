@@ -138,6 +138,12 @@ The three zero rows are not evidence of failure: at 128 the workload thrashes (e
 misses its whole prompt regardless of victims), at 296/320 the cache fits and nothing is
 evicted.
 
+Two further audit facts are recorded per decision rather than summarised away. The baseline
+victim list in every decision record is the **actual free-queue order** the native allocator
+would have consumed at that instant, so "we compared against native order" is checkable
+decision-by-decision. And every physically evicted block is counted from the pool's own
+`evict_blocks` side effect (`entry.hash` cleared), not from the policy's intent.
+
 ## 5. Ablation: which component produces the gain
 
 Reference workflow, seed `20260101`, four arms, identical inputs:
