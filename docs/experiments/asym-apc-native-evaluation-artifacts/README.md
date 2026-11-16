@@ -1,5 +1,10 @@
 # AsymAPC native evaluation artifacts
 
+> **Historical pre-fix dataset.** The original A0 and AsymAPC arms did not have
+> equivalent populated Retention Entry state. Keep this manifest/archive for
+> reproducibility; use the [corrected CPU replay report](../asym-apc-pr3-corrected-cpu-revalidation.md)
+> and the linked fresh CI artifacts for causal comparison.
+>
 Complete evidence bundle for the AsymCache-inspired contiguous-prefix victim selector
 evaluated against the real vLLM `BlockPool`.
 Design: [`experiment-design.md`](experiment-design.md). Report:
