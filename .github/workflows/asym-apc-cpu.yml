@@ -22,7 +22,20 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install -e . pytest
-      - run: python -m pytest -q tests/test_asym_apc_native.py tests/test_asym_apc_repo_integration.py
+      - name: New Native arm, campaign, request-time accounting and probe fairness tests
+        run: |
+          python -m pytest -q \
+            tests/test_asym_apc_native_arm.py \
+            tests/test_asym_apc_campaign.py \
+            tests/test_asym_apc_real_blockpool_probe.py \
+            tests/test_asym_apc_native.py \
+            tests/test_asym_apc_repo_integration.py
       - run: python -m pytest -q tests/test_costaware_a2_native.py tests/test_costaware_a2_evidence.py tests/test_costaware_a2_contract.py tests/test_continuum_retention_integration.py tests/test_continuum_pressure.py tests/test_continuum_vllm_observation_runner.py
-      - run: python -m compileall -q src/kvopt scripts/spikes/phase2_minimal_observability_metal.py
+      - name: All self-contained repository CPU tests
+        run: |
+          python -m pytest -q tests --disable-warnings --tb=line \
+            --deselect=tests/test_continuum_bounded_campaign.py::test_materialize_campaign_freezes_54_runs_and_cross_arm_time \
+            --deselect=tests/test_continuum_bounded_campaign.py::test_validation_rejects_tampered_logical_sequence
+      - name: Compile Native implementation, calibration, probes and analysis
+        run: python -m compileall -q src/kvopt scripts/spikes/phase2_minimal_observability_metal.py scripts/probes/asym_apc_native
       - run: python scripts/probes/asym_apc_native/simulate.py --groups 160 --seed 20261115
