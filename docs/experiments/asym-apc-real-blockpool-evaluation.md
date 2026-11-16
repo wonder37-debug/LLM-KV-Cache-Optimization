@@ -1,5 +1,12 @@
 # AsymAPC victim selection on the real vLLM BlockPool (CPU device)
 
+> **Superseded as a causal A0-vs-AsymAPC comparison (2026-11-16).**
+> The original CPU BlockPool probe populated Continuum Retention Entries only
+> for the treatment arm. The original raw data and percentages are retained for
+> provenance, but do not establish selector-only benefit. See the
+> [corrected real vLLM CPU revalidation](asym-apc-pr3-corrected-cpu-revalidation.md),
+> which reran the three arms after fixing this confound.
+>
 **Status: executed on real vLLM cache code, CPU device. Not a GPU experiment and not a serving experiment.**
 Block-level victim selection was measured against the native allocator with real prefix
 hashes, real reference counts, real cache lookups and real prefix-cache eviction. No GPU
