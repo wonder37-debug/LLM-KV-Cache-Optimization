@@ -28,7 +28,10 @@ from typing import Any
 DESIGN_SCHEMA = "asym_apc.native_evaluation_design.v1"
 MATERIALIZATION_SCHEMA = "asym_apc.native_evaluation_materialization.v1"
 CAMPAIGN_KIND = "asym_apc_native_evaluation"
-PREFIX_GENERATOR_VERSION = "kvopt.asym_apc.segments.v1"
+# Reuse the generator that the existing Phase 2C Native backend accepts.
+from kvopt.workload.phase2c_native_pilot import PILOT_PREFIX_GENERATOR_VERSION
+
+PREFIX_GENERATOR_VERSION = PILOT_PREFIX_GENERATOR_VERSION
 ARMS = ("NATIVE_LRU", "A0", "ASYM_APC")
 
 
