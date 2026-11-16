@@ -55,7 +55,10 @@ Both failures were artifacts of my working environment, not of the branch: one n
 package installed (`pip install -e .`), the other asserts a clean git tree
 (`test_phase2e_runner.py`). After both were addressed and this work was committed, the same
 command reports **2045 passed, 19 skipped, 0 failed, 2 deselected**. The two additional passes
-are those two tests; 23 of the total are the new ablation and workload-family tests.
+are those two tests; 23 of the total are the new ablation and workload-family tests. After the
+delta-priced search of §7 added its equivalence tests the same command reports **2057 passed, 19
+skipped, 0 failed, 2 deselected**; the two deselected tests assert a clean git tree and a frozen
+runtime hash, and are excluded for exactly that reason.
 
 ## 2. Design and controlled variables
 
