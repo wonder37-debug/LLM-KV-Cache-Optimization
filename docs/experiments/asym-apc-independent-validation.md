@@ -46,10 +46,11 @@ python -m pytest -q tests --disable-warnings --tb=line \
 → 2043 passed, 19 skipped, 2 failed, 2 deselected
 ```
 
-Both failures are artifacts of my working environment, not of the branch: one required the
-package to be installed (`pip install -e .`, done — it now passes), the other asserts a clean
-git tree (`test_phase2e_runner.py`, resolved by the commit that carries this report). No test
-related to the selector failed.
+Both failures were artifacts of my working environment, not of the branch: one needed the
+package installed (`pip install -e .`), the other asserts a clean git tree
+(`test_phase2e_runner.py`). After both were addressed and this work was committed, the same
+command reports **2045 passed, 19 skipped, 0 failed, 2 deselected**. The two additional passes
+are those two tests; 23 of the total are the new ablation and workload-family tests.
 
 ## 2. Design and controlled variables
 
